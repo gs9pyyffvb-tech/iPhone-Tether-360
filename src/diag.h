@@ -2,22 +2,17 @@
 
 namespace it360_diag {
 
-// Starts the asynchronous persistent log writer and resolves Xbox notification UI.
-// Safe to call more than once.
+// Immediate crash-diagnostic checkpoint.
+// Unlike Log(), this writes synchronously and does not depend on the
+// asynchronous logging worker being alive.
+void BootCheckpoint(const char* format, ...);
+
 void Init();
 void Shutdown();
 
-// Mirrors to DbgPrint immediately and queues the same formatted line for persistent
-// storage. The filesystem write is deliberately performed by the worker thread,
-// never by the USB callback that called Log().
 void Log(const char* format, ...);
-
-// Queues a short dashboard notification. Notification delivery is best-effort and
-// never affects the USB/pairing state machine.
 void Notify(const char* text);
 
-// Returns the selected persistent log path, or an empty string until a writable
-// Xbox storage volume has been found.
 const char* LogPath();
 
 } // namespace it360_diag

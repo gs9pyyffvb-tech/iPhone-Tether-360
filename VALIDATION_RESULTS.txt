@@ -1,0 +1,65 @@
+Batch 9C ipheth/NCM tests: PASS
+Batch 9C standalone network end-to-end + retry/renew tests: PASS
+Batch 9B pair-session tests: PASS
+Batch 9B protocol + persistence tests: PASS
+Batch 9B embedded identity + XeCrypt blob verification: PASS
+PASS built 1005-byte device PEM
+Batch 9B runtime DeviceCertificate signature/key/extensions verification: PASS
+All IT360_XBOX source units C++98 host syntax: PASS
+OpenXeChain migration audit: PASS (47 source/build files scanned)
+PASS platform layer uses xecorelib headers
+PASS raw kernel thread creation has explicit OpenXeChain-safe termination thunk
+PASS kernel relative delay replaces sleep wrapper
+PASS PowerPC compiler atomics replace legacy atomic wrappers
+PASS module ordinal resolution centralized
+PASS kernel build resolved through xboxkrnl data export
+PASS DllMain signature matches OpenXeChain newlib CRT
+PASS 17559 fail-closed kernel gate retained
+PASS embedded XeCrypt keys use clang alignment attribute
+PASS executable trampoline is immutable after XEX mapping
+PASS 17559 kernel patch explicitly synchronizes Xenon data/instruction caches
+PASS OpenXeChain Xbox target/subsystem selected
+PASS OpenXeChain CRT entry and SynthXEX sysdll packaging selected
+PASS plugin image base and SynthXEX-valid alignment fixed
+PASS PE and final XEX are structurally verified
+PASS GitHub build pins current OpenXeChain aggregate revision
+PASS GitHub Actions publishes finished XEX
+PASS DevicePublicKey parsed from lockdownd Value
+PASS string GetValue parsed from lockdownd Value
+PASS Pair request never transmits host private keys
+PASS extended pairing options retained
+PASS iOS Trust-pending retry retained
+PASS persistent ValidatePair reconnect retained
+PASS EscrowBag persistence retained
+PASS stale pairing recovery retained
+PASS XeCrypt RSA/SHA1 ordinals retained
+PASS runtime device certificate creation retained
+PASS pair store routes filesystem calls through OpenXeChain platform layer
+PASS Apple VID exact
+PASS ipheth interface 2 alt 1
+PASS FF/FD/01 tether match
+PASS Apple GET_MACADDR control
+PASS Apple ENABLE_NCM control
+PASS Apple CARRIER_CHECK control
+PASS SET_INTERFACE(2,1) retained
+PASS tether activation waits for Pair/ValidatePair
+PASS dynamic USB matcher routes tether interface
+PASS 64 KiB NCM RX buffer
+PASS Apple NCM parser retained
+PASS legacy ipheth RX fallback retained
+PASS single worker owns network state
+PASS USB callback only queues Ethernet frames
+PASS DHCP/renewal retained
+PASS ARP/ICMP retained
+PASS DNS resolver retained
+PASS TCP/HTTP validation retained
+PASS Internet validation state exposed
+PASS final standalone Internet success marker retained
+PASS persistent logging uses platform I/O with HDD/USB fallback
+PASS diagnostic file I/O remains asynchronous
+PASS XNotify is compile-time gated off by default for system-thread safety
+PASS USB callback addresses are explicitly narrowed for 32-bit target
+PASS OpenXeChain target build asserts recovered 17559 USB ABI layouts
+PASS deployment example names OpenXeChain XEX
+OpenXeChain source verifier: PASS (54 checks)
+iPhoneTether360 OpenXeChain host/source validation: PASS

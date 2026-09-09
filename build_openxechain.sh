@@ -57,6 +57,7 @@ SOURCES=(
 )
 
 CXXFLAGS=(
+    --target=ppc32-xbox360
     -std=gnu++98
     -O2
     -DNDEBUG
@@ -116,8 +117,10 @@ echo "================================================================"
 echo "LINK $PE"
 
 "$CXX" \
+    --target=ppc32-xbox360 \
     "${OBJECTS[@]}" \
     -o "$PE" \
+    -Wl,/subsystem:xbox360 \
     -Wl,/dll \
     -Wl,/base:0x91DE0000 \
     -Wl,/errorlimit:0

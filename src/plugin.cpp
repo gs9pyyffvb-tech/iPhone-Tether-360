@@ -58,11 +58,7 @@ static uint32_t DelayedInitialize(void*) {
 
 } // namespace
 
-extern "C" int DllMain(
-    unsigned int module_handle,
-    unsigned int reason,
-    unsigned int
-) {
+extern "C" int DllMain(unsigned int module_handle, unsigned int reason, unsigned int) {
     static const unsigned kProcessAttach = 1;
 
     if (reason != kProcessAttach)

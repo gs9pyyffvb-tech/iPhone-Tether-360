@@ -4,9 +4,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 PREFIX="${OPENXECHAIN_PREFIX:-${OXC_PREFIX:-$ROOT/.openxechain/sysroot}}"
 BIN="$PREFIX/bin"
+
 CC="${CC:-$BIN/clang}"
 CXX="${CXX:-$BIN/clang++}"
 SYNTHXEX="${SYNTHXEX:-$BIN/synthxex}"
+
 OUT_NAME="iPhoneTether360-B9C-OXC"
 BUILD="$ROOT/build"
 
@@ -18,12 +20,15 @@ for tool in "$CC" "$CXX" "$SYNTHXEX"; do
     fi
 done
 
-if [[ ! -f "$PREFIX/include/xecore/xboxkrnl.h" || ! -f "$PREFIX/include/xecore/xam.h" || ! -f "$PREFIX/lib/xecorelib.a" ]]; then
+if [[ ! -f "$PREFIX/include/xecore/xboxkrnl.h" \
+   || ! -f "$PREFIX/include/xecore/xam.h" \
+   || ! -f "$PREFIX/lib/xecorelib.a" ]]; then
     echo "ERROR: incomplete OpenXeChain sysroot at $PREFIX" >&2
     exit 1
 fi
 
 python3 "$ROOT/tools/audit_openxechain_port.py"
+
 rm -rf "$BUILD"
 mkdir -p "$BUILD/obj"
 
@@ -63,6 +68,7 @@ CXXFLAGS=(
     -fno-threadsafe-statics
     -ffunction-sections
     -fdata-sections
+    -ferror-limit=0
     -Wall
     -Wextra
     -Werror
@@ -70,20 +76,40 @@ CXXFLAGS=(
 )
 
 OBJECTS=()
+compile_failed=0
+
 for source in "${SOURCES[@]}"; do
     object="$BUILD/obj/$(basename "${source%.cpp}").o"
+
+    echo "================================================================"
     echo "CXX $source"
-    "$CXX" "${CXXFLAGS[@]}" -c "$ROOT/$source" -o "$object"
-    OBJECTS+=("$object")
+
+    if "$CXX" \
+        "${CXXFLAGS[@]}" \
+        -c "$ROOT/$source" \
+        -o "$object"; then
+
+        OBJECTS+=("$object")
+    else
+        compile_failed=1
+        rm -f "$object"
+        echo "FAILED $source"
+    fi
 done
+
+if [[ $compile_failed -ne 0 ]]; then
+    echo "================================================================"
+    echo "ERROR: one or more iPhoneTether360 translation units failed."
+    echo "All source files were attempted so the log contains every compiler error from this run."
+    exit 1
+fi
 
 PE="$BUILD/$OUT_NAME.exe"
 XEX="$BUILD/$OUT_NAME.xex"
 
+echo "================================================================"
 echo "LINK $PE"
-# OpenXeChain's modified lld-link recognizes the Xbox 360 PE subsystem. The
-# 4-KiB section alignment and fixed image base are both accepted by SynthXEX
-# and mirror the established plugin layout used by this project.
+
 "$CC" \
     --target=ppc32-xbox360 \
     --sysroot="$PREFIX" \
@@ -102,7 +128,12 @@ echo "LINK $PE"
 python3 "$ROOT/tools/verify_openxechain_pe.py" "$PE"
 
 echo "SYNTHXEX $XEX"
-"$SYNTHXEX" --input "$PE" --output "$XEX" --type sysdll
+
+"$SYNTHXEX" \
+    --input "$PE" \
+    --output "$XEX" \
+    --type sysdll
+
 python3 "$ROOT/tools/verify_openxechain_xex.py" "$XEX"
 
 if command -v sha256sum >/dev/null 2>&1; then

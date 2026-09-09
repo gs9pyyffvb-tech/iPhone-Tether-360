@@ -121,8 +121,10 @@ echo "LINK $PE"
     "${OBJECTS[@]}" \
     -o "$PE" \
     -Wl,/subsystem:xbox360 \
+    -Wl,/entry:_start \
     -Wl,/dll \
     -Wl,/base:0x91DE0000 \
+    -Wl,/align:4096 \
     -Wl,/errorlimit:0
 
 python3 "$ROOT/tools/verify_openxechain_pe.py" "$PE"

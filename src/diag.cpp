@@ -149,6 +149,57 @@ static uint32_t Worker(void*) {
 
 } // namespace
 
+void BootCheckpoint(const char* format, ...) {
+    if (!format) return;
+
+    char message[256];
+
+    va_list ap;
+    va_start(ap, format);
+    vsnprintf(message, sizeof(message) - 1, format, ap);
+    va_end(ap);
+
+    message[sizeof(message) - 1] = 0;
+
+    DbgPrint("[iPhoneTether360:BOOT] %s\n", message);
+
+    char line[320];
+    snprintf(
+        line,
+        sizeof(line) - 1,
+        "[iPhoneTether360:BOOT] %s\r\n",
+        message
+    );
+    line[sizeof(line) - 1] = 0;
+
+    static const char* paths[] = {
+        "Hdd1:\\iPhoneTether360.boot.log",
+        "Usb0:\\iPhoneTether360.boot.log",
+        "Usb1:\\iPhoneTether360.boot.log",
+        "Usb2:\\iPhoneTether360.boot.log",
+        "Usb3:\\iPhoneTether360.boot.log"
+    };
+
+    for (unsigned i = 0; i < sizeof(paths) / sizeof(paths[0]); ++i) {
+        it360_platform::FileHandle file =
+            it360_platform::OpenAppend(paths[i]);
+
+        if (!file)
+            continue;
+
+        const bool ok = it360_platform::WriteAll(
+            file,
+            line,
+            strlen(line)
+        );
+
+        it360_platform::CloseFile(file);
+
+        if (ok)
+            return;
+    }
+}
+
 void Init() {
     if (it360_platform::AtomicCompareExchange(&gStarted, 1, 0) != 0) return;
     ResolveNotify();

@@ -5,14 +5,14 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 PREFIX="${OPENXECHAIN_PREFIX:-${OXC_PREFIX:-$ROOT/.openxechain/sysroot}}"
 BIN="$PREFIX/bin"
 
-CC="${CC:-$BIN/clang}"
 CXX="${CXX:-$BIN/clang++}"
 SYNTHXEX="${SYNTHXEX:-$BIN/synthxex}"
+NM="${NM:-$BIN/llvm-nm}"
 
 OUT_NAME="iPhoneTether360-B9C-OXC"
 BUILD="$ROOT/build"
 
-for tool in "$CC" "$CXX" "$SYNTHXEX"; do
+for tool in "$CXX" "$SYNTHXEX"; do
     if [[ ! -x "$tool" ]]; then
         echo "ERROR: OpenXeChain tool not found: $tool" >&2
         echo "Set OPENXECHAIN_PREFIX to the installed OpenXeChain sysroot." >&2
@@ -22,7 +22,9 @@ done
 
 if [[ ! -f "$PREFIX/include/xecore/xboxkrnl.h" \
    || ! -f "$PREFIX/include/xecore/xam.h" \
-   || ! -f "$PREFIX/lib/xecorelib.a" ]]; then
+   || ! -f "$PREFIX/lib/xecorelib.a" \
+   || ! -f "$PREFIX/ppc-xbox360/lib/libc.a" \
+   || ! -f "$PREFIX/lib/generic/libclang_rt.builtins-powerpc.a" ]]; then
     echo "ERROR: incomplete OpenXeChain sysroot at $PREFIX" >&2
     exit 1
 fi
@@ -55,19 +57,14 @@ SOURCES=(
 )
 
 CXXFLAGS=(
-    --target=ppc32-xbox360
-    --sysroot="$PREFIX"
     -std=gnu++98
     -O2
     -DNDEBUG
     -DIT360_XBOX=1
     -DIT360_OPENXECHAIN=1
-    -mlongcall
     -fno-exceptions
     -fno-rtti
     -fno-threadsafe-statics
-    -ffunction-sections
-    -fdata-sections
     -ferror-limit=0
     -Wall
     -Wextra
@@ -104,26 +101,26 @@ if [[ $compile_failed -ne 0 ]]; then
     exit 1
 fi
 
+if [[ -x "$NM" ]]; then
+    echo "================================================================"
+    echo "C++ COFF symbol sanity check"
+
+    "$NM" -C "$BUILD/obj/xbox_platform.o" | \
+        grep -E 'FailedStatus|RawThreadThunk|StartDetachedThread' || true
+fi
+
 PE="$BUILD/$OUT_NAME.exe"
 XEX="$BUILD/$OUT_NAME.xex"
 
 echo "================================================================"
 echo "LINK $PE"
 
-"$CC" \
-    --target=ppc32-xbox360 \
-    --sysroot="$PREFIX" \
-    -mlongcall \
-    -fuse-ld=lld \
+"$CXX" \
     "${OBJECTS[@]}" \
     -o "$PE" \
     -Wl,/dll \
-    -Wl,/entry:_start \
-    -Wl,/subsystem:xbox360 \
     -Wl,/base:0x91DE0000 \
-    -Wl,/align:4096 \
-    -Wl,/opt:ref \
-    -Wl,/opt:icf
+    -Wl,/errorlimit:0
 
 python3 "$ROOT/tools/verify_openxechain_pe.py" "$PE"
 

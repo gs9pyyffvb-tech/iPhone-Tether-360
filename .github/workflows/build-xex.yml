@@ -53,11 +53,19 @@ jobs:
         run: |
           rm -rf .openxechain/buildscript
           mkdir -p .openxechain
+
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git config --global --add url."https://github.com/".insteadOf "ssh://git@github.com/"
+
           git clone https://github.com/OpenXeChain/buildscript.git .openxechain/buildscript
           cd .openxechain/buildscript
           git checkout "$OXC_BUILDSCRIPT_COMMIT"
+
+          git submodule sync --recursive
           git submodule update --init --recursive
+
           find . -type f -name '*.sh' -exec chmod +x {} \;
+
           PREFIX="$OXC_PREFIX" PARALLEL="$(nproc)" bash ./build-toolchain.sh
 
       - name: Build sysdll XEX

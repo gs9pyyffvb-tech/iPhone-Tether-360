@@ -4,6 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '.github/workflows/build-xex.yml'
 
 permissions:
   contents: read
@@ -11,6 +13,7 @@ permissions:
 env:
   OXC_PREFIX: ${{ github.workspace }}/.openxechain/sysroot
   OXC_BUILDSCRIPT_COMMIT: eed1fa65bf9577fd31625764b320a90182ea9ade
+  OXC_CACHE_VERSION: v4
 
 jobs:
   build:
@@ -41,15 +44,40 @@ jobs:
           python3 tools/audit_openxechain_port.py
           bash tools/run_host_validation.sh
 
-      - name: Restore OpenXeChain toolchain cache
-        id: oxc-cache
-        uses: actions/cache@v4
+      - name: Restore complete or partial OpenXeChain cache
+        id: oxc-restore
+        uses: actions/cache/restore@v4
         with:
           path: .openxechain/sysroot
-          key: openxechain-${{ runner.os }}-${{ env.OXC_BUILDSCRIPT_COMMIT }}
+          key: openxechain-complete-ubuntu24-${{ runner.arch }}-${{ env.OXC_CACHE_VERSION }}-${{ env.OXC_BUILDSCRIPT_COMMIT }}
+          restore-keys: |
+            openxechain-partial-ubuntu24-${{ runner.arch }}-${{ env.OXC_CACHE_VERSION }}-${{ env.OXC_BUILDSCRIPT_COMMIT }}-
 
-      - name: Build pinned OpenXeChain toolchain
-        if: steps.oxc-cache.outputs.cache-hit != 'true'
+      - name: Check restored toolchain state
+        id: oxc-state
+        shell: bash
+        run: |
+          complete=false
+          llvm=false
+
+          if [[ -x "$OXC_PREFIX/bin/clang" && -x "$OXC_PREFIX/bin/lld-link" ]]; then
+            llvm=true
+          fi
+
+          if [[ "$llvm" == "true" \
+             && -f "$OXC_PREFIX/lib/xecorelib.a" \
+             && -f "$OXC_PREFIX/ppc-xbox360/lib/libc.a" \
+             && -x "$OXC_PREFIX/bin/synthxex" ]]; then
+            complete=true
+          fi
+
+          echo "llvm=$llvm" >> "$GITHUB_OUTPUT"
+          echo "complete=$complete" >> "$GITHUB_OUTPUT"
+          echo "Restored state: llvm=$llvm complete=$complete"
+
+      - name: Prepare pinned OpenXeChain source
+        if: steps.oxc-state.outputs.complete != 'true'
+        shell: bash
         run: |
           rm -rf .openxechain/buildscript
           mkdir -p .openxechain
@@ -60,13 +88,176 @@ jobs:
           git clone https://github.com/OpenXeChain/buildscript.git .openxechain/buildscript
           cd .openxechain/buildscript
           git checkout "$OXC_BUILDSCRIPT_COMMIT"
-
           git submodule sync --recursive
           git submodule update --init --recursive
-
           find . -type f -name '*.sh' -exec chmod +x {} \;
 
+      - name: Build LLVM/Clang milestone with live log
+        id: llvm-build
+        if: steps.oxc-state.outputs.complete != 'true' && steps.oxc-state.outputs.llvm != 'true'
+        continue-on-error: true
+        shell: bash
+        run: |
+          cd .openxechain/buildscript
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          src = Path("build-toolchain.sh").read_text()
+          marker = 'echo -e "${TOOLCHAIN_STEM}Cross compiler built and installed!"\n'
+          end = src.find(marker)
+
+          if end < 0:
+              raise SystemExit("Could not locate pinned OpenXeChain LLVM completion marker")
+
+          end += len(marker)
+
+          Path("build-llvm-stage.sh").write_text(
+              src[:end] + "\nexit 0\n"
+          )
+          PY
+
+          chmod +x build-llvm-stage.sh
+          : > build.log
+
+          tail -n +1 -F build.log &
+          tail_pid=$!
+
+          set +e
+          PREFIX="$OXC_PREFIX" PARALLEL="$(nproc)" bash ./build-llvm-stage.sh
+          rc=$?
+          set -e
+
+          kill "$tail_pid" 2>/dev/null || true
+          wait "$tail_pid" 2>/dev/null || true
+
+          if [[ $rc -ne 0 ]]; then
+            echo "LLVM/Clang stage failed with exit code $rc"
+            echo "----- final build.log tail -----"
+            tail -n 500 build.log || true
+            exit "$rc"
+          fi
+
+          test -x "$OXC_PREFIX/bin/clang"
+          test -x "$OXC_PREFIX/bin/lld-link"
+
+      - name: Save LLVM/Clang milestone cache
+        if: steps.llvm-build.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: .openxechain/sysroot
+          key: openxechain-partial-ubuntu24-${{ runner.arch }}-${{ env.OXC_CACHE_VERSION }}-${{ env.OXC_BUILDSCRIPT_COMMIT }}-llvm-${{ github.run_id }}
+
+      - name: Upload LLVM failure log
+        if: steps.llvm-build.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenXeChain-LLVM-build-log-${{ github.run_id }}
+          if-no-files-found: warn
+          path: .openxechain/buildscript/build.log
+
+      - name: Stop after LLVM failure
+        if: steps.llvm-build.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "LLVM stage failed. Its full build log was preserved."
+          exit 1
+
+      - name: Build remaining OpenXeChain stages with live log
+        id: oxc-build
+        if: steps.oxc-state.outputs.complete != 'true' && steps.llvm-build.outcome != 'failure'
+        continue-on-error: true
+        shell: bash
+        run: |
+          cd .openxechain/buildscript
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("build-toolchain.sh")
+          s = p.read_text()
+
+          start_marker = "# Configure it first\n"
+          end_marker = 'echo -e "${TOOLCHAIN_STEM}Cross compiler built and installed!"\n'
+
+          start = s.find(start_marker)
+          end = s.find(end_marker, start)
+
+          if start < 0 or end < 0:
+              raise SystemExit("Could not locate pinned OpenXeChain LLVM build block")
+
+          end += len(end_marker)
+          original = s[start:end]
+
+          replacement = (
+              'if [[ -x "${PREFIX}/bin/clang" && -x "${PREFIX}/bin/lld-link" ]]; then\n'
+              '    echo -e "${TOOLCHAIN_STEM}Restored LLVM/Clang detected; skipping cross-compiler rebuild."\n'
+              'else\n'
+              + original +
+              'fi\n'
+          )
+
+          p.write_text(s[:start] + replacement + s[end:])
+          PY
+
+          : > build.log
+
+          tail -n +1 -F build.log &
+          tail_pid=$!
+
+          set +e
           PREFIX="$OXC_PREFIX" PARALLEL="$(nproc)" bash ./build-toolchain.sh
+          rc=$?
+          set -e
+
+          kill "$tail_pid" 2>/dev/null || true
+          wait "$tail_pid" 2>/dev/null || true
+
+          if [[ $rc -ne 0 ]]; then
+            echo "OpenXeChain remainder failed with exit code $rc"
+            echo "----- final build.log tail -----"
+            tail -n 500 build.log || true
+            exit "$rc"
+          fi
+
+      - name: Save partial OpenXeChain progress after later-stage failure
+        if: steps.oxc-build.outcome == 'failure'
+        uses: actions/cache/save@v4
+        with:
+          path: .openxechain/sysroot
+          key: openxechain-partial-ubuntu24-${{ runner.arch }}-${{ env.OXC_CACHE_VERSION }}-${{ env.OXC_BUILDSCRIPT_COMMIT }}-later-${{ github.run_id }}
+
+      - name: Upload OpenXeChain failure log
+        if: steps.oxc-build.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenXeChain-build-log-${{ github.run_id }}
+          if-no-files-found: warn
+          path: .openxechain/buildscript/build.log
+
+      - name: Stop after cached later-stage failure
+        if: steps.oxc-build.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "Later OpenXeChain stage failed, but installed sysroot progress was saved first."
+          exit 1
+
+      - name: Verify completed OpenXeChain toolchain
+        if: steps.oxc-state.outputs.complete != 'true'
+        shell: bash
+        run: |
+          test -x "$OXC_PREFIX/bin/clang"
+          test -x "$OXC_PREFIX/bin/lld-link"
+          test -f "$OXC_PREFIX/lib/xecorelib.a"
+          test -f "$OXC_PREFIX/ppc-xbox360/lib/libc.a"
+          test -x "$OXC_PREFIX/bin/synthxex"
+
+      - name: Save complete OpenXeChain toolchain
+        if: steps.oxc-state.outputs.complete != 'true' && steps.oxc-build.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: .openxechain/sysroot
+          key: openxechain-complete-ubuntu24-${{ runner.arch }}-${{ env.OXC_CACHE_VERSION }}-${{ env.OXC_BUILDSCRIPT_COMMIT }}
 
       - name: Build sysdll XEX
         run: |

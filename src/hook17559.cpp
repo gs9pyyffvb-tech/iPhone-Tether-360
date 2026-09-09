@@ -158,10 +158,7 @@ bool MatcherHook17559::Install(
         sizeof(patch)
     );
 
-    it360_platform::FlushInstructionCache(
-        src,
-        sizeof(patch)
-    );
+    it360_platform::FlushInstructionCache(src, sizeof(patch));
 
     target_ = target;
 

@@ -27,14 +27,34 @@ g++ -std=c++17 -Wall -Wextra -Werror -Isrc tools/test_x509.cpp src/der_x509.cpp 
 "$TMP/test_x509" "$TMP/device-pub.pem"
 python3 tools/verify_device_cert.py /tmp/b9b-root.pem /tmp/b9b-device.pem "$TMP/device-pub.pem"
 
-mkdir -p "$TMP/xbox"
-for f in src/*.cpp src/platform/*.cpp; do
-    b="$(basename "$f" .cpp)"
-    g++ -std=c++98 -Wall -Wextra -Werror -Wno-unknown-pragmas -DIT360_XBOX=1 -Isrc -c "$f" -o "$TMP/xbox/$b.o"
-done
-echo "All IT360_XBOX source units C++98 host syntax: PASS"
+echo "Running B9D frame/bridge host tests"
+"${CXX98[@]}" tools/test_step17_frames.cpp src/native_net/frame_translate.cpp -o "$TMP/test_step17_frames"
+"$TMP/test_step17_frames"
+"${CXX98[@]}" tools/test_step17_bridge.cpp src/native_net/xnet_bridge.cpp src/native_net/frame_translate.cpp -o "$TMP/test_step17_bridge"
+"$TMP/test_step17_bridge"
 
+mkdir -p "$TMP/xbox"
+while IFS= read -r f; do
+    case "$f" in
+        src/tls/*) continue ;;
+    esac
+    rel="${f#src/}"
+    obj="${rel//\//_}"
+    obj="${obj%.cpp}.o"
+    g++ -std=c++98 -Wall -Wextra -Werror -Wno-unknown-pragmas -DIT360_XBOX=1 -Isrc -c "$f" -o "$TMP/xbox/$obj"
+done < <(find src -type f -name '*.cpp' | sort)
+echo "All non-BearSSL project translation units IT360_XBOX C++98 host syntax: PASS"
+
+bash tools/audit_host_symbols.sh
+bash tools/test_notify_openxechain_syntax.sh
+
+python3 tools/audit_build_manifest.py
+python3 tools/audit_step4.py
 python3 tools/audit_openxechain_port.py
 python3 tools/verify_openxechain_source.py
+python3 tools/audit_step2.py
+python3 tools/audit_step3.py
+python3 tools/audit_step17.py
+python3 tools/audit_final_polish.py
 
 echo "iPhoneTether360 OpenXeChain host/source validation: PASS"

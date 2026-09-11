@@ -1,117 +1,73 @@
-# Batch 9C OpenXeChain hardware test — Xbox 360 kernel 17559 + iPhone iOS 26.1
+# iPhoneTether360 1.0.0 hardware test — Xbox 360 kernel 17559 + iPhone
 
-This package is source-complete through Batch 9C. Hardware confirmation requires a successful OpenXeChain build and a physical console/iPhone run.
+This tree is ready for its final OpenXeChain PowerPC build and then physical hardware validation. Do not configure it as a mandatory boot plugin until the first manual load is stable.
 
-## 1. Produce the XEX in GitHub
+## 1. Build
 
-Push the complete source tree to a GitHub repository, then run:
-
-```text
-Actions -> Build iPhoneTether360 XEX -> Run workflow
-```
-
-Download the completed Actions artifact:
+Push the complete final tree to the repository and run the **Build iPhoneTether360 1.0.0** GitHub Actions workflow. Download artifact:
 
 ```text
-iPhoneTether360-B9C-OpenXeChain
+iPhoneTether360-1.0.0-OpenXeChain
 ```
 
-Use this file from the artifact:
+It must contain `Loader.xex`, `Core.xex`, `LicenseID.xex`, their SHA-256 files, `BUILD_OUTPUTS.txt`, and `VERSION.txt`.
 
-```text
-iPhoneTether360-B9C-OXC.xex
-```
+## 2. Deploy
 
-The workflow performs the source migration audit, host regressions, OpenXeChain target compilation, SynthXEX conversion, structural PE/XEX verification and SHA-256 generation before publishing the artifact.
+Put `Loader.xex`, `Core.xex`, and `LicenseID.xex` in the same application directory. For the first test, launch `Loader.xex` manually from Aurora. Loader should load resident `Core.xex` and return to Aurora. `launch.ini.example` is only an optional direct-Core autoload example for later use.
 
-## 2. Deploy for the first test
+Keep the iPhone unlocked, enable cellular data and Personal Hotspot, and approve **Trust This Computer?** if iOS presents it.
 
-Keep this as a manual/development test rather than an automatic boot dependency until the hardware path is stable. The XEX itself is a system-DLL/plugin module; load it with your chosen plugin-loader test method. `launch.ini.example` shows the filename/path for later automatic DashLaunch use, but automatic boot loading is not required for the first development run.
+## 3. Startup diagnostics
 
-Keep the iPhone unlocked. Enable cellular data and Personal Hotspot. If iOS presents **Trust This Computer?**, approve it and enter the phone passcode when requested.
-
-## 3. Pair / ValidatePair gate
-
-First pairing should eventually log:
-
-```text
-[iPhoneTether360:B9C] SUCCESS iPhone paired/trusted; 9B milestone reached
-```
-
-A previously paired iPhone should instead reach:
-
-```text
-[iPhoneTether360:B9C] SUCCESS persisted pairing validated/reused
-```
-
-## 4. Tether-interface bring-up
-
-Expected progression:
-
-```text
-[iPhoneTether360:B9C] MATCH Apple tether interface FF/FD/01
-[iPhoneTether360:B9C] MATCH tether VID=05ac PID=.... alt1 IN=../.. OUT=../..
-[iPhoneTether360:B9C] pairing ready; starting ipheth control setup
-[iPhoneTether360:B9C] tether MAC=xx:xx:xx:xx:xx:xx
-[iPhoneTether360:B9C] Apple NCM RX mode enabled
-[iPhoneTether360:B9C] SET_INTERFACE(2,1) complete
-[iPhoneTether360:B9C] ipheth endpoints ready IN=../.. OUT=../.. NCM=1
-[iPhoneTether360:B9C] Personal Hotspot carrier=ON
-```
-
-If `ENABLE_NCM` is rejected, the code intentionally falls back to legacy RX mode. That is not by itself a failure.
-
-## 5. Standalone IP bring-up
-
-Expected progression:
-
-```text
-[iPhoneTether360:B9C] DHCP Discover sent xid=........
-[iPhoneTether360:B9C] DHCP Offer ...
-[iPhoneTether360:B9C] DHCP ACK IP=... gateway=... DNS=... lease=...s
-[iPhoneTether360:B9C] ARP gateway resolved ...
-```
-
-ICMP is diagnostic only; DNS/TCP validation does not require the gateway to answer ping.
-
-## 6. Internet validation
-
-Final expected progression:
-
-```text
-[iPhoneTether360:B9C] DNS example.com = ...
-[iPhoneTether360:B9C] TCP/80 handshake complete
-[iPhoneTether360:B9C] SUCCESS standalone Internet HTTP response received through iPhone
-```
-
-That final line proves:
-
-```text
-Xbox plugin -> Apple USB Ethernet -> iPhone Personal Hotspot -> Internet -> iPhone -> Xbox plugin
-```
-
-It does not yet make Aurora or games use the iPhone. That is Batch 9D.
-
-## 7. Failure capture
-
-Copy the complete persistent log after a failed run:
+Normal startup history is app-local `Boot.log`; runtime diagnostics are app-local `Log.txt`. If Core freezes before its application directory is resolved, the emergency pre-CRT trace is synchronously written to:
 
 ```text
 Hdd1:\iPhoneTether360.log
 ```
 
-If absent, check `Usb0:` through `Usb3:` for the same filename.
+The successful handoff replays the early trace into `Boot.log`. There is no USB logging fallback.
 
-Useful failure boundaries:
+`iPhoneTether360 Ready` means Core loaded successfully and is ready for the phone to be connected; it does not mean tethering is already active.
 
-- no plugin-start line: module packaging/loading problem;
-- unsupported-kernel line: build is intentionally refusing to patch a non-17559 kernel;
-- no FF/FE/02 match: usbmux-interface matching/USB hook issue;
-- no Pair/ValidatePair success: lockdownd/crypto/trust issue;
-- no FF/FD/01 match: tether-interface discovery problem;
-- no tether MAC: Apple control-transfer problem or Pair not accepted;
-- SET_INTERFACE/open-endpoint failure: recovered Xbox USB ABI/alternate-setting problem;
-- carrier OFF: Personal Hotspot/iPhone state problem;
+## 4. Pair and tether progression
+
+Expected milestones include Pair/ValidatePair success, Apple tether interface discovery, tether MAC acquisition, NCM/legacy RX setup, `SET_INTERFACE(2,1)`, carrier ON, DHCP, gateway ARP, DNS/TCP Internet validation, licensing classification and native Xbox bridge activation.
+
+Expected user-facing progression includes:
+
+```text
+iPhone Detected
+Checking iPhone Data...
+iPhone Data Working
+License Has Been Found
+iPhone to Xbox Complete
+```
+
+For a valid allow-list response where the console is not licensed, expect:
+
+```text
+No License found for this Xbox
+```
+
+If the licensing service itself is unavailable, the network gate deliberately fails open; an explicit valid unlicensed response does not.
+
+## 5. Native Xbox network gate
+
+`iPhone to Xbox Complete` is the final success condition. It is emitted only when Internet data has been proven, the licensing worker has completed, the licence gate permits native networking, and the B9D native bridge is active. At that point the test advances beyond the earlier standalone B9C proof and into the Xbox networking path.
+
+## 6. Failure capture
+
+After any failure, preserve the complete `Boot.log` and `Log.txt`. If the machine froze before normal-path handoff, also preserve `Hdd1:\iPhoneTether360.log`.
+
+The Step-3 diagnostics retain the exact operation and hexadecimal return/status wherever the underlying Xbox API exposes one. Report the last successful `BOOT`, `ENTRY`, USB, Pair, network, licence or B9D line rather than paraphrasing it.
+
+Useful boundaries are: no emergency entry line = XEX load/entry problem; emergency entry but no normal handoff = CRT/path/startup problem; no USB match = matcher/USB path; no Pair/ValidatePair = lockdownd/trust/crypto; no tether MAC/NCM/interface = Apple USB control path; carrier ON but no DHCP = Ethernet/NCM; DHCP but no Internet proof = IP/DNS/TCP path; Internet proof but no licence decision = TLS/licensing; licence allows but no completion = native B9D bridge.
+
+## 7. Reconnect test
+
+After a successful first connection, unplug the iPhone, confirm `iPhone Disconnected`, reconnect it, confirm persisted `ValidatePair` reuse, and verify the data/licence/native bridge progression returns through `iPhone to Xbox Complete` without restarting the console.
+t/iPhone state problem;
 - carrier ON but no DHCP Offer: Ethernet TX/RX/NCM problem;
 - DHCP succeeds but ARP fails: Ethernet receive/routing issue;
 - ARP succeeds but DNS fails: IPv4/UDP/DNS issue;

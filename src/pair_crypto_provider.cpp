@@ -3,6 +3,7 @@
 #include "pair_identity_generated.h"
 #include "sha256.h"
 #include "der_x509.h"
+#include "diag.h"
 #include <string.h>
 
 
@@ -32,7 +33,19 @@ static RsaPrvFn gRsa = 0;
 static Sha1FnRaw gSha1 = 0;
 
 static bool ResolveOrdinal(DWORD ordinal, void** out) {
-    return it360_platform::ResolveModuleOrdinal("xboxkrnl.exe", ordinal, out);
+    it360_platform::ResolveStatus diagnostic;
+    if (it360_platform::ResolveModuleOrdinal("xboxkrnl.exe", ordinal, out, &diagnostic)) return true;
+    if (diagnostic.has_status) {
+        it360_diag::Log("[iPhoneTether360:B9B] crypto export resolve failed | ordinal=%u operation=%s NTSTATUS=0x%08x\n",
+                        static_cast<unsigned>(ordinal),
+                        it360_platform::ResolveOperationName(diagnostic.operation),
+                        static_cast<unsigned>(diagnostic.status));
+    } else {
+        it360_diag::Log("[iPhoneTether360:B9B] crypto export resolve failed | ordinal=%u operation=%s status=unavailable\n",
+                        static_cast<unsigned>(ordinal),
+                        it360_platform::ResolveOperationName(diagnostic.operation));
+    }
+    return false;
 }
 
 static bool Sha1Digest(const uint8_t* data, size_t len, uint8_t out[20]) {

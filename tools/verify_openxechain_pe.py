@@ -3,9 +3,11 @@ import struct
 import sys
 from pathlib import Path
 
-if len(sys.argv) != 2:
-    raise SystemExit('usage: verify_openxechain_pe.py <file.exe>')
+if len(sys.argv) != 3 or sys.argv[2] not in {'title', 'sysdll'}:
+    raise SystemExit('usage: verify_openxechain_pe.py <file.exe> <title|sysdll>')
+
 p = Path(sys.argv[1])
+kind = sys.argv[2]
 data = p.read_bytes()
 if len(data) < 0x100 or data[:2] != b'MZ':
     raise SystemExit('PE verify FAIL: missing MZ header')
@@ -21,12 +23,14 @@ entry = struct.unpack_from('<I', data, opt + 16)[0]
 image_base = struct.unpack_from('<I', data, opt + 28)[0]
 section_alignment = struct.unpack_from('<I', data, opt + 32)[0]
 subsystem = struct.unpack_from('<H', data, opt + 68)[0]
+is_dll = bool(characteristics & 0x2000)
+expected_base = 0x82000000 if kind == 'title' else 0x91DE0000
 checks = {
     'POWERPCBE machine 0x1F2': machine == 0x1F2,
     'at least one section': sections > 0,
-    'DLL characteristic': bool(characteristics & 0x2000),
+    ('title is not PE DLL' if kind == 'title' else 'sysdll has PE DLL characteristic'): (not is_dll if kind == 'title' else is_dll),
     'non-zero entry point': entry != 0,
-    'image base 0x91DE0000': image_base == 0x91DE0000,
+    'expected image base 0x%08X' % expected_base: image_base == expected_base,
     'SynthXEX-compatible page alignment': section_alignment in (0x1000, 0x10000),
     'Xbox subsystem 0x000E': subsystem == 0x000E,
     'optional header fits': peoff + 24 + opt_size <= len(data),
@@ -36,4 +40,4 @@ for name, ok in checks.items():
     print(('PASS ' if ok else 'FAIL ') + name)
 if failed:
     raise SystemExit('PE verify FAIL: ' + ', '.join(failed))
-print('OpenXeChain PE verifier: PASS')
+print('OpenXeChain PE verifier: PASS (%s)' % kind)

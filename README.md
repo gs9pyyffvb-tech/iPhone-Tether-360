@@ -1,169 +1,119 @@
-# iPhoneTether360 — Batch 9C OpenXeChain port
+# iPhoneTether360 1.0.0 — OpenXeChain
 
-This tree contains the complete Batch 9B Pair/Trust implementation plus Batch 9C standalone iPhone USB Personal Hotspot networking, ported to the **OpenXeChain** Xbox 360 toolchain.
+iPhoneTether360 is an Xbox 360 RGH/JTAG homebrew package that connects an iPhone USB Personal Hotspot directly to the console. The target is kernel/dashboard **17559** and the build is **OpenXeChain only**; no proprietary Microsoft SDK headers or libraries are required.
 
-The current milestone is deliberately before Batch 9D. Batch 9C is intended to prove that the plugin itself can move Internet traffic through the iPhone. It does **not** yet register the iPhone link as an Xbox system NIC, so Aurora/games/XNet will not automatically use it until 9D is implemented.
+## Final package
 
-## Toolchain
+The application is split into three XEX files:
 
-The target build uses:
+- `Loader.xex` — normal Aurora-launched title. It resolves its installation directory, opens `Boot.log`, refuses duplicate Core loads, loads `Core.xex` as the resident system DLL, then returns.
+- `Core.xex` — resident sysdll containing Pair/Trust, Apple USB tethering, DHCP/ARP/DNS/TCP diagnostics, the native Xbox network bridge, licensing, notifications and persistent diagnostics.
+- `LicenseID.xex` — one-time title utility that derives the app-specific SHA-256 licence ID from the console CPU key and writes `LicenseID.txt` beside the application.
 
-```text
-OpenXeChain LLVM/Clang (ppc32-xbox360)
-        -> Xbox 360 PE/DLL
-        -> SynthXEX --type sysdll
-        -> iPhoneTether360-B9C-OXC.xex
-```
+Runtime files are created beside the XEX files where applicable: `Boot.log`, `Log.txt`, and `LicenseID.txt`. Before Core can resolve its application directory, pre-CRT checkpoints are synchronously written to `Hdd1:\iPhoneTether360.log`; once the normal path is available those checkpoints are replayed into app-local `Boot.log` and normal logging takes over.
 
-The project uses OpenXeChain `xecorelib` for Xbox kernel/XAM imports and OpenXeChain Newlib for the Xbox CRT. There is no dependency on legacy proprietary compiler headers, libraries, compiler startup symbols or image-conversion tools.
+## Build chain and pinned dependencies
 
-The GitHub Actions workflow pins the aggregate OpenXeChain buildscript revision recorded in `.github/workflows/build-xex.yml`, builds the toolchain when it is not already cached, compiles the project, structurally verifies both the intermediate Xbox PE and final XEX, and publishes the XEX as an Actions artifact.
+GitHub Actions pins OpenXeChain aggregate buildscript revision `eed1fa65bf9577fd31625764b320a90182ea9ade`. That revision was audited against its pinned components, including:
 
-## Build with GitHub Actions
+- `xecorelib` `c65d67e071357acade681f04c46ae9719797f239`
+- OpenXeChain Newlib `f929633c27099d404e9cb5b2739a9c7f9b6afccc`
+- SynthXEX `48d1453a55468aa2f8a211db0b20edd594ef5be3`
+- LLVM `890b83f6c8259a8899e182a5f7d9cf39c64131cc`
 
-1. Put this complete source tree in a GitHub repository.
-2. Open **Actions**.
-3. Select **Build iPhoneTether360 XEX**.
-4. Choose **Run workflow**.
-5. When the job completes, download the artifact named:
+The Core TLS implementation additionally pins XboxTLS/BearSSL source revision `dc0cc21cbf6ae9e75f1974833742f80b45519326`. The build disables BearSSL Unix-time fallback and supplies certificate time from the Xbox kernel path instead.
+
+The build sequence is:
 
 ```text
-iPhoneTether360-B9C-OpenXeChain
+OpenXeChain Clang --target=ppc32-xbox360
+  -> Loader.exe       -> SynthXEX title  -> Loader.xex
+  -> Core.exe /dll    -> SynthXEX sysdll -> Core.xex
+  -> LicenseID.exe    -> SynthXEX title  -> LicenseID.xex
 ```
 
-It contains:
+All three intermediate PE images and all three XEX outputs are structurally verified. `Core.xex` is linked at base `0x91DE0000`; Loader requests Core with system/resident module flags `0x0000000A`.
+
+## GitHub Actions
+
+Run **Build iPhoneTether360 1.0.0**. The final artifact is named `iPhoneTether360-1.0.0-OpenXeChain` and contains:
 
 ```text
-iPhoneTether360-B9C-OXC.xex
-iPhoneTether360-B9C-OXC.sha256
+Loader.xex
+Loader.sha256
+Core.xex
+Core.sha256
+LicenseID.xex
+LicenseID.sha256
+BUILD_OUTPUTS.txt
+VERSION.txt
 ```
 
-The workflow also runs the host packet/pairing regressions and the migration audit before the Xbox-target build.
+The workflow runs the source/build-manifest, Step-4, migration and host regression audits before entering the expensive OpenXeChain build. A missing source/header or stale deployment artifact therefore fails early.
 
-## Local OpenXeChain build
-
-If you already have an OpenXeChain sysroot installed, set `OPENXECHAIN_PREFIX` to it and run:
+For a local build with an existing OpenXeChain sysroot:
 
 ```bash
 OPENXECHAIN_PREFIX=/path/to/openxechain/sysroot bash ./build_openxechain.sh
 ```
 
-Expected output:
+## Core data path
 
-```text
-build/iPhoneTether360-B9C-OXC.xex
-```
-
-## OpenXeChain compatibility layer
-
-Xbox-specific toolchain/runtime interaction is centralized in:
-
-```text
-src/platform/xbox_platform.h
-src/platform/xbox_platform.cpp
-```
-
-That layer provides the project with:
-
-- kernel/XAM module and ordinal resolution through `XexGetModuleHandle` / `XexGetProcedureAddress`;
-- raw detached worker threads through `ExCreateThread` with explicit `ExTerminateThread` completion;
-- millisecond waits through `KeDelayExecutionThread`;
-- 32-bit atomics via compiler PowerPC atomics;
-- Xenon data/instruction-cache synchronization after the kernel hook is written;
-- persistent file I/O through the XAM imports exposed by `xecorelib`;
-- kernel build detection through `XboxKrnlVersion`.
-
-The project fails closed if the console kernel build is not **17559** before touching the recovered 17559-only matcher address.
-
-## End-to-end 9C flow
+The retained Pair/Trust and tether sequence is:
 
 ```text
 Apple USB device
-  |-- FF/FE/02 usbmux interface
-  |     `-- Batch 9B: lockdownd Pair / ValidatePair
-  |
-  `-- FF/FD/01 interface 2
-        `-- wait until Batch 9B reports pairing ready
-            -> GET_MACADDR (0xC0 / 0x00, index 2)
-            -> ENABLE_NCM (0x41 / 0x04, index 2)
-            -> SET_INTERFACE(2, 1)
-            -> open alternate-setting-1 Bulk IN / Bulk OUT
-            -> CARRIER_CHECK (0xC0 / 0x45, index 2)
-            -> raw Ethernet TX
-            -> Apple limited-NCM Ethernet RX
-            -> DHCP
-            -> ARP gateway resolution
-            -> ICMP diagnostic ping
-            -> DNS A lookup for example.com
-            -> TCP port 80 handshake
-            -> HTTP/1.0 request
-            -> standalone Internet-path success
+  -> usbmux FF/FE/02
+     -> Pair / ValidatePair / persistent pair record
+  -> tether FF/FD/01 interface 2
+     -> GET_MACADDR
+     -> ENABLE_NCM
+     -> SET_INTERFACE(2,1)
+     -> Bulk IN / Bulk OUT
+     -> carrier state
+     -> DHCP / ARP / DNS / TCP diagnostic path
+     -> licensing decision (fail-open only when service is unavailable)
+     -> native Xbox Ethernet bridge
+     -> iPhone to Xbox Complete
 ```
 
-## USB tether driver
+The native bridge is implemented and remains disabled until the iPhone transport is configured and the licence gate permits it. A valid licence-list response that does not contain the console remains a deny; an unavailable/invalid licensing service does not strand the user's networking path.
 
-`src/tether_driver.cpp` implements the Xbox-facing Apple USB Ethernet driver.
+## Kernel and USB safety
 
-- Exact Apple match: VID `0x05AC`, interface 2, alternate 0, class/subclass/protocol `FF/FD/01`.
-- Manually parses the raw configuration descriptor for interface 2 alternate setting 1 and its Bulk IN/OUT endpoints.
-- Reuses the recovered kernel-17559 USB attachment route from earlier batches.
-- Does not issue another device-level `SET_CONFIGURATION`; the tether interface waits until the usbmux/Pair path is ready, then changes only interface 2 to alternate setting 1.
-- Reads the six-byte tether MAC address.
-- Attempts Apple's NCM RX mode and falls back to the legacy two-byte-aligned receive format if NCM enable is rejected.
-- Polls Personal Hotspot carrier state approximately once per second.
-- Sends host-to-iPhone Ethernet frames raw, without NCM encapsulation.
-- Continuously receives iPhone-to-host traffic using a 64 KiB NCM receive buffer.
-- USB RX completions only decode/copy frames into a bounded hand-off queue. A single worker owns DHCP/ARP/DNS/TCP state.
-- TX completion callbacks only clear transfer state; queue ownership remains on the worker thread.
-- Detach/replug uses a generation guard and worker restart handoff.
+The project fails closed when the kernel build is not **17559** before installing the recovered USB matcher hook. The two unexported USB descriptor helpers (`0x800D83A0` and `0x800D8500`) are therefore intentionally limited to this target and contained within the USB driver implementation. Recovered TRB/control-TRB layouts have compile-time size assertions, and hook writes explicitly synchronize Xenon data/instruction caches.
 
-## Apple NCM / legacy receive parser
+Critical imported ordinals used by the current implementation were checked against pinned `xecorelib`, including module resolution/loading, native file I/O, thread functions, `XeCryptRandom`, `KeQuerySystemTime`, USB exports, `ExExpansionCall`, XAM Ethernet interception, and `XNotifyQueueUI` ordinal 656.
 
-`src/ipheth_ncm.cpp` handles:
+## Notifications
 
-- NTH16 `NCMH` header;
-- NDP16 `NCM0` no-CRC table;
-- the 108-byte iOS NCM header floor;
-- multiple Ethernet datagrams in one USB transfer;
-- strict index/length bounds checking;
-- the initial `00 01` four-byte control frame;
-- zero-payload completions;
-- the legacy two-byte alignment prefix fallback.
+Core USB/network workers do not call `XNotifyQueueUI` directly. Runtime notifications are first queued by the Core diagnostic worker. If the eventual caller is already `PROC_USER`, the XAM UI call can run directly; otherwise the notification layer marshals the toast through XAM `CreateThread` ordinal 1084 so the UI call executes in user/XAPI thread context.
 
-## Standalone network validation stack
+User-facing status messages include phone detection/data/reconnect/disconnect progress. `iPhoneTether360 Ready` means Core has loaded and is ready for the iPhone to be connected. The final successful native-path notification is `iPhone to Xbox Complete`.
 
-`src/net_stack.cpp` is deliberately a small diagnostic stack, not a replacement for Xbox networking. It implements:
+## Licensing
 
-- Ethernet II dispatch;
-- ARP request/reply and gateway-MAC cache;
-- DHCP Discover / Offer / Request / ACK;
-- DHCP retry, T1 renewal and lease-expiry restart;
-- IPv4 checksums and fragmented-packet rejection;
-- ICMP echo diagnostics;
-- UDP;
-- DNS A lookup;
-- minimal TCP;
-- an HTTP/1.0 GET to `example.com` on port 80.
+`LicenseID.xex` reads the CPU key through the XeUnshackle-compatible HVPP expansion, derives the application-specific SHA-256 ID, writes only the derived ID, and wipes raw CPU-key/hash material. Core fetches the fixed allow-list over TLS and never writes the licensing host/path or CPU key into its runtime logs.
 
-The final 9C hardware-success marker is:
+Required notifications are exactly:
 
 ```text
-[iPhoneTether360:B9C] SUCCESS standalone Internet HTTP response received through iPhone
+License Has Been Found
+No License found for this Xbox
 ```
 
-## Pairing dependency
+## Validation
 
-Batch 9B remains in this tree and provides:
+Run:
 
-- usbmux v2 and lockdownd transport;
-- fresh Pair/Trust;
-- DeviceCertificate generation;
-- persistent pair records;
-- `ValidatePair` reconnect;
-- Trust-dialog-pending retry;
-- persistent diagnostics.
+```bash
+bash tools/run_host_validation.sh
+```
 
-The tether driver does not begin Apple Ethernet setup until Batch 9B reports Pair or ValidatePair success.
+The host suite covers Pair/Trust, NCM, standalone network behavior, B9D frame translation/native bridge tests, recursive C++98 syntax checks for project translation units that do not require the external BearSSL checkout, and all source/static audits.
+
+A clean host/static audit is a **pre-build gate**, not hardware proof. The final PowerPC OpenXeChain build must still succeed, its three generated XEX files must pass structural verification, and then the package must be tested on the target 17559 console/iPhone hardware.
+ or ValidatePair success.
 
 ## Diagnostics
 

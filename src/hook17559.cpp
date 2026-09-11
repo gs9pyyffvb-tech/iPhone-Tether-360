@@ -77,7 +77,8 @@ bool MatcherHook17559::Install(
     void* replacement
 ) {
     it360_diag::BootCheckpoint(
-        "HOOK 01: MatcherHook17559::Install entered target=%08x replacement=%08x",
+        "HOOK 01: MatcherHook17559::Install entered "
+        "target=%08x replacement=%08x",
         static_cast<unsigned>(
             reinterpret_cast<uintptr_t>(target)
         ),
@@ -86,10 +87,14 @@ bool MatcherHook17559::Install(
         )
     );
 
-    if (!target || !replacement || target_) {
+    if (!target ||
+        !replacement ||
+        target_) {
+
         it360_diag::BootCheckpoint(
             "HOOK 02: invalid hook arguments/state"
         );
+
         return false;
     }
 
@@ -107,13 +112,27 @@ bool MatcherHook17559::Install(
         "HOOK 03: checking 17559 matcher prologue"
     );
 
+    it360_diag::BootCheckpoint(
+        "HOOK 03A: live prologue "
+        "%08x %08x %08x %08x",
+        static_cast<unsigned>(src[0]),
+        static_cast<unsigned>(src[1]),
+        static_cast<unsigned>(src[2]),
+        static_cast<unsigned>(src[3])
+    );
+
     if (memcmp(
             src,
             expected,
             sizeof(expected)) != 0) {
 
         it360_diag::BootCheckpoint(
-            "HOOK 04: matcher prologue MISMATCH"
+            "HOOK 04: matcher prologue MISMATCH; "
+            "expected %08x %08x %08x %08x",
+            static_cast<unsigned>(expected[0]),
+            static_cast<unsigned>(expected[1]),
+            static_cast<unsigned>(expected[2]),
+            static_cast<unsigned>(expected[3])
         );
 
         return false;
@@ -130,7 +149,27 @@ bool MatcherHook17559::Install(
     );
 
     it360_diag::BootCheckpoint(
-        "HOOK 06: original matcher bytes saved"
+        "HOOK 06: original matcher bytes saved "
+        "%08x %08x %08x %08x",
+        static_cast<unsigned>(original_[0]),
+        static_cast<unsigned>(original_[1]),
+        static_cast<unsigned>(original_[2]),
+        static_cast<unsigned>(original_[3])
+    );
+
+    it360_diag::BootCheckpoint(
+        "HOOK 06A: immutable trampoline address=%08x "
+        "head=%08x %08x %08x %08x tail=%08x",
+        static_cast<unsigned>(
+            reinterpret_cast<uintptr_t>(
+                trampoline_
+            )
+        ),
+        static_cast<unsigned>(gMatcherTrampoline[0]),
+        static_cast<unsigned>(gMatcherTrampoline[1]),
+        static_cast<unsigned>(gMatcherTrampoline[2]),
+        static_cast<unsigned>(gMatcherTrampoline[3]),
+        static_cast<unsigned>(gMatcherTrampoline[12])
     );
 
     DWORD patch[4];
@@ -147,11 +186,17 @@ bool MatcherHook17559::Install(
     );
 
     it360_diag::BootCheckpoint(
-        "HOOK 07: absolute branch generated; kernel patch next"
+        "HOOK 07: absolute branch generated "
+        "%08x %08x %08x %08x; kernel patch next",
+        static_cast<unsigned>(patch[0]),
+        static_cast<unsigned>(patch[1]),
+        static_cast<unsigned>(patch[2]),
+        static_cast<unsigned>(patch[3])
     );
 
-    // Do not perform filesystem logging between the actual kernel write and
-    // cache synchronization.
+    // CRITICAL WINDOW:
+    // no filesystem, formatted logging, allocation or thread calls are
+    // permitted between the code write and Xenon cache synchronization.
     memcpy(
         src,
         patch,
@@ -164,6 +209,15 @@ bool MatcherHook17559::Install(
 
     it360_diag::BootCheckpoint(
         "HOOK 08: kernel patch written and instruction cache synchronized"
+    );
+
+    it360_diag::BootCheckpoint(
+        "HOOK 08A: live patched prologue "
+        "%08x %08x %08x %08x",
+        static_cast<unsigned>(src[0]),
+        static_cast<unsigned>(src[1]),
+        static_cast<unsigned>(src[2]),
+        static_cast<unsigned>(src[3])
     );
 
     return true;

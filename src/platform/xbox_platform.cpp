@@ -7,6 +7,27 @@ bool FailedStatus(NTSTATUS status) {
     return static_cast<int32_t>(status) < 0;
 }
 
+const char* ResolveOperationName(ResolveOperation operation) {
+    switch (operation) {
+    case ResolveOperationInvalidArgument: return "argument validation";
+    case ResolveOperationXexGetModuleHandle: return "XexGetModuleHandle";
+    case ResolveOperationNullModuleHandle: return "XexGetModuleHandle(null module)";
+    case ResolveOperationXexGetProcedureAddress: return "XexGetProcedureAddress";
+    case ResolveOperationNullProcedureAddress: return "XexGetProcedureAddress(null procedure)";
+    default: return "none";
+    }
+}
+
+const char* ThreadStartOperationName(ThreadStartOperation operation) {
+    switch (operation) {
+    case ThreadStartOperationInvalidEntry: return "thread entry validation";
+    case ThreadStartOperationExAllocatePoolWithTag: return "ExAllocatePoolWithTag";
+    case ThreadStartOperationExCreateThread: return "ExCreateThread";
+    case ThreadStartOperationNullThreadHandle: return "ExCreateThread(null handle)";
+    default: return "none";
+    }
+}
+
 LONG AtomicCompareExchange(volatile LONG* value, LONG exchange, LONG comparand) {
 #if defined(__GNUC__) || defined(__clang__)
     return __sync_val_compare_and_swap(value, comparand, exchange);
@@ -43,6 +64,16 @@ void SleepMs(DWORD milliseconds) {
     KeDelayExecutionThread(0, 0, &interval);
 #else
     (void)milliseconds;
+#endif
+}
+
+uint64_t MonotonicMs() {
+#if defined(IT360_OPENXECHAIN)
+    int64_t now = 0;
+    KeQuerySystemTime(&now);
+    return now > 0 ? static_cast<uint64_t>(now) / 10000ULL : 0ULL;
+#else
+    return static_cast<uint64_t>(0);
 #endif
 }
 
@@ -88,12 +119,19 @@ static uint32_t RawThreadThunk(void* opaque) {
 }
 #endif
 
-bool StartDetachedThread(ThreadFn entry, void* context) {
-    if (!entry) return false;
+bool StartDetachedThread(ThreadFn entry, void* context, ThreadStartStatus* diagnostic) {
+    if (diagnostic) *diagnostic = ThreadStartStatus();
+    if (!entry) {
+        if (diagnostic) diagnostic->operation = ThreadStartOperationInvalidEntry;
+        return false;
+    }
 #if defined(IT360_OPENXECHAIN)
     ThreadStartBlock* block = static_cast<ThreadStartBlock*>(
         ExAllocatePoolWithTag(sizeof(ThreadStartBlock), 0x49543336u)); // 'IT36'
-    if (!block) return false;
+    if (!block) {
+        if (diagnostic) diagnostic->operation = ThreadStartOperationExAllocatePoolWithTag;
+        return false;
+    }
     block->entry = entry;
     block->context = context;
 
@@ -103,12 +141,33 @@ bool StartDetachedThread(ThreadFn entry, void* context) {
     // raw thread; RawThreadThunk provides deterministic termination semantics.
     NTSTATUS status = ExCreateThread(&thread, 0, &thread_id, 0,
                                      reinterpret_cast<void*>(RawThreadThunk), block, 0x2u);
-    if (FailedStatus(status) || !thread) {
+    if (diagnostic) {
+        diagnostic->operation = ThreadStartOperationExCreateThread;
+        diagnostic->status = status;
+        diagnostic->has_status = true;
+    }
+    if (FailedStatus(status)) {
         ExFreePool(block);
         return false;
     }
+    if (!thread) {
+        ExFreePool(block);
+        if (diagnostic) {
+            diagnostic->operation = ThreadStartOperationNullThreadHandle;
+            diagnostic->has_status = false;
+        }
+        return false;
+    }
+
     // The kernel owns the running thread; close only our handle reference.
-    NtClose(thread);
+    const NTSTATUS close_status = NtClose(thread);
+    if (diagnostic) {
+        diagnostic->close_status = close_status;
+        diagnostic->close_status_valid = true;
+        diagnostic->operation = ThreadStartOperationNone;
+        diagnostic->status = 0;
+        diagnostic->has_status = false;
+    }
     return true;
 #else
     (void)context;
@@ -116,22 +175,56 @@ bool StartDetachedThread(ThreadFn entry, void* context) {
 #endif
 }
 
-bool ResolveModuleOrdinal(const char* module_name, DWORD ordinal, void** out) {
-    if (!module_name || !out) return false;
+bool ResolveModuleOrdinal(const char* module_name, DWORD ordinal, void** out,
+                          ResolveStatus* diagnostic) {
+    if (diagnostic) *diagnostic = ResolveStatus();
+    if (!module_name || !out) {
+        if (diagnostic) diagnostic->operation = ResolveOperationInvalidArgument;
+        return false;
+    }
     *out = 0;
 #if defined(IT360_OPENXECHAIN)
     HMODULE module = 0;
     NTSTATUS status = XexGetModuleHandle(module_name, &module);
-    if (FailedStatus(status) || !module) return false;
+    if (diagnostic) {
+        diagnostic->operation = ResolveOperationXexGetModuleHandle;
+        diagnostic->status = status;
+        diagnostic->has_status = true;
+    }
+    if (FailedStatus(status)) return false;
+    if (!module) {
+        if (diagnostic) {
+            diagnostic->operation = ResolveOperationNullModuleHandle;
+            diagnostic->has_status = false;
+        }
+        return false;
+    }
+
     status = XexGetProcedureAddress(module, ordinal, out);
-    return !FailedStatus(status) && *out != 0;
+    if (diagnostic) {
+        diagnostic->operation = ResolveOperationXexGetProcedureAddress;
+        diagnostic->status = status;
+        diagnostic->has_status = true;
+    }
+    if (FailedStatus(status)) return false;
+    if (!*out) {
+        if (diagnostic) {
+            diagnostic->operation = ResolveOperationNullProcedureAddress;
+            diagnostic->has_status = false;
+        }
+        return false;
+    }
+
+    if (diagnostic) *diagnostic = ResolveStatus();
+    return true;
 #else
     (void)ordinal;
+    if (diagnostic) diagnostic->operation = ResolveOperationXexGetModuleHandle;
     return false;
 #endif
 }
 
-WORD KernelBuild() {
+WORD KernelBuild(ResolveStatus* diagnostic) {
 #if defined(IT360_OPENXECHAIN)
     struct KernelVersion {
         WORD major;
@@ -142,10 +235,11 @@ WORD KernelBuild() {
     void* address = 0;
     // xboxkrnl export 344 is the XboxKrnlVersion data export. Resolving it at
     // runtime avoids depending on a toolchain-specific variable declaration.
-    if (!ResolveModuleOrdinal("xboxkrnl.exe", 344, &address) || !address) return 0;
+    if (!ResolveModuleOrdinal("xboxkrnl.exe", 344, &address, diagnostic) || !address) return 0;
     const KernelVersion* version = static_cast<const KernelVersion*>(address);
     return version->build;
 #else
+    (void)diagnostic;
     return 17559;
 #endif
 }
@@ -156,7 +250,10 @@ FileHandle OpenAppend(const char* path) {
     HANDLE file = CreateFileA(const_cast<char*>(path), GENERIC_WRITE,
                               FILE_SHARE_READ | FILE_SHARE_WRITE, 0,
                               OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
-    if (file == INVALID_HANDLE_VALUE) return 0;
+    if (file == INVALID_HANDLE_VALUE) {
+        DbgPrint("[iPhoneTether360:PLATFORM] file open failed | operation=CreateFileA(append) result=INVALID_HANDLE_VALUE status=unavailable\n");
+        return 0;
+    }
     SetFilePointer(file, 0, 0, 2u);
     return file;
 #else
@@ -182,7 +279,11 @@ FileHandle OpenTruncate(const char* path) {
     HANDLE file = CreateFileA(const_cast<char*>(path), GENERIC_WRITE,
                               FILE_SHARE_READ | FILE_SHARE_WRITE, 0,
                               CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
-    return file == INVALID_HANDLE_VALUE ? 0 : file;
+    if (file == INVALID_HANDLE_VALUE) {
+        DbgPrint("[iPhoneTether360:PLATFORM] file open failed | operation=CreateFileA(truncate) result=INVALID_HANDLE_VALUE status=unavailable\n");
+        return 0;
+    }
+    return file;
 #else
     return static_cast<FileHandle>(fopen(path, "wb"));
 #endif
@@ -193,7 +294,11 @@ bool ReadBounded(FileHandle file, void* data, size_t capacity, size_t* bytes_rea
     *bytes_read = 0;
 #if defined(IT360_OPENXECHAIN)
     uint32_t got = 0;
-    if (!ReadFile(file, data, static_cast<uint32_t>(capacity), &got, 0)) return false;
+    if (!ReadFile(file, data, static_cast<uint32_t>(capacity), &got, 0)) {
+        DbgPrint("[iPhoneTether360:PLATFORM] file read failed | operation=ReadFile result=FALSE status=unavailable requested=0x%08x\n",
+                 static_cast<unsigned>(capacity));
+        return false;
+    }
     *bytes_read = got;
     // If the caller filled the entire bounded buffer, prove EOF with one
     // additional byte. This rejects oversized/corrupt pair records rather
@@ -201,7 +306,10 @@ bool ReadBounded(FileHandle file, void* data, size_t capacity, size_t* bytes_rea
     if (got == capacity) {
         BYTE extra = 0;
         uint32_t extra_got = 0;
-        if (!ReadFile(file, &extra, 1, &extra_got, 0)) return false;
+        if (!ReadFile(file, &extra, 1, &extra_got, 0)) {
+            DbgPrint("[iPhoneTether360:PLATFORM] file EOF probe failed | operation=ReadFile result=FALSE status=unavailable\n");
+            return false;
+        }
         if (extra_got != 0) return false;
     }
     return true;
@@ -219,8 +327,13 @@ bool WriteAll(FileHandle file, const void* data, size_t bytes) {
     size_t remaining = bytes;
     while (remaining) {
         uint32_t wrote = 0;
-        if (!WriteFile(file, const_cast<BYTE*>(p), static_cast<uint32_t>(remaining), &wrote, 0) || !wrote)
+        const bool write_ok = WriteFile(file, const_cast<BYTE*>(p), static_cast<uint32_t>(remaining), &wrote, 0);
+        if (!write_ok || !wrote) {
+            DbgPrint("[iPhoneTether360:PLATFORM] file write failed | operation=WriteFile result=%s status=unavailable requested=0x%08x written=0x%08x\n",
+                     write_ok ? "TRUE-with-zero-write" : "FALSE",
+                     static_cast<unsigned>(remaining), static_cast<unsigned>(wrote));
             return false;
+        }
         p += wrote;
         remaining -= wrote;
     }
@@ -233,7 +346,8 @@ bool WriteAll(FileHandle file, const void* data, size_t bytes) {
 void CloseFile(FileHandle file) {
     if (!file) return;
 #if defined(IT360_OPENXECHAIN)
-    CloseHandle(file);
+    if (!CloseHandle(file))
+        DbgPrint("[iPhoneTether360:PLATFORM] file close failed | operation=CloseHandle result=FALSE status=unavailable\n");
 #else
     fclose(static_cast<FILE*>(file));
 #endif

@@ -1,2 +1,3 @@
+; Optional direct Core autoload. Normal use is to launch Loader.xex from Aurora.
 [Plugins]
-plugin5 = Usb:\iPhoneTether360-B9C-OXC.xex
+plugin5 = Usb:\iPhoneTether360\Core.xex

@@ -1,4 +1,4 @@
-name: Build iPhoneTether360 XEX
+name: Build iPhoneTether360 1.0.0
 
 on:
   workflow_dispatch:
@@ -11,22 +11,13 @@ permissions:
 env:
   OXC_PREFIX: ${{ github.workspace }}/.openxechain/sysroot
   OXC_BUILDSCRIPT_COMMIT: eed1fa65bf9577fd31625764b320a90182ea9ade
-  OXC_CACHE_VERSION: v4
 
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
-
     steps:
       - name: Checkout project
         uses: actions/checkout@v4
-
-      - name: Fix script permissions
-        shell: bash
-        run: |
-          chmod +x build_openxechain.sh
-          find tools -type f -name '*.sh' -exec chmod +x {} \;
 
       - name: Install validation and OpenXeChain build prerequisites
         run: |
@@ -35,45 +26,52 @@ jobs:
             build-essential clang cmake ninja-build git python3 python3-yaml \
             autoconf automake libtool pkg-config bison flex gawk texinfo \
             bzip2 gzip grep findutils sed tar unzip zip openssl libssl-dev \
-            zlib1g-dev libzstd-dev libgmp-dev libmpfr-dev libmpc-dev libboost-dev
+            zlib1g-dev libzstd-dev libgmp-dev libmpfr-dev libmpc-dev
 
-      - name: Audit migration and run host tests
+      - name: Audit final source/build manifest and run host tests
         run: |
+          python3 tools/audit_build_manifest.py
+          python3 tools/audit_step4.py
           python3 tools/audit_openxechain_port.py
           bash tools/run_host_validation.sh
 
-      - name: Restore complete or partial OpenXeChain cache
-        id: oxc-restore
-        uses: actions/cache/restore@v4
+      - name: Restore OpenXeChain toolchain cache
+        id: oxc-cache
+        uses: actions/cache@v4
         with:
           path: .openxechain/sysroot
-          key: openxechain-complete-ubuntu24-${{ runner.arch }}-${{ env.OXC_CACHE_VERSION }}-${{ env.OXC_BUILDSCRIPT_COMMIT }}
-          restore-keys: |
-            openxechain-partial-ubuntu24-${{ runner.arch }}-${{ env.OXC_CACHE_VERSION }}-${{ env.OXC_BUILDSCRIPT_COMMIT }}-
+          key: openxechain-${{ runner.os }}-${{ env.OXC_BUILDSCRIPT_COMMIT }}
 
-      - name: Check restored toolchain state
-        id: oxc-state
-        shell: bash
+      - name: Build pinned OpenXeChain toolchain
+        if: steps.oxc-cache.outputs.cache-hit != 'true'
         run: |
-          complete=false
-          llvm=false
+          rm -rf .openxechain/buildscript
+          mkdir -p .openxechain
+          git clone https://github.com/OpenXeChain/buildscript.git .openxechain/buildscript
+          cd .openxechain/buildscript
+          git checkout "$OXC_BUILDSCRIPT_COMMIT"
+          git submodule update --init --recursive
+          PREFIX="$OXC_PREFIX" PARALLEL="$(nproc)" bash ./build-toolchain.sh
 
-          if [[ -x "$OXC_PREFIX/bin/clang" \
-             && -x "$OXC_PREFIX/bin/clang++" \
-             && -x "$OXC_PREFIX/bin/lld-link" ]]; then
-            llvm=true
-          fi
+      - name: Build final XEX set
+        run: |
+          OPENXECHAIN_PREFIX="$OXC_PREFIX" bash ./build_openxechain.sh
 
-          if [[ "$llvm" == "true" \
-             && -f "$OXC_PREFIX/lib/xecorelib.a" \
-             && -f "$OXC_PREFIX/ppc-xbox360/lib/libc.a" \
-             && -f "$OXC_PREFIX/lib/generic/libclang_rt.builtins-powerpc.a" \
-             && -x "$OXC_PREFIX/bin/synthxex" ]]; then
-            complete=true
-          fi
-
-          echo "llvm=$llvm" >> "$GITHUB_OUTPUT"
-          echo "complete=$complete" >> "$GITHUB_OUTPUT"
+      - name: Upload final app
+        uses: actions/upload-artifact@v4
+        with:
+          name: iPhoneTether360-1.0.0-OpenXeChain
+          if-no-files-found: error
+          path: |
+            build/Loader.xex
+            build/Loader.sha256
+            build/Core.xex
+            build/Core.sha256
+            build/LicenseID.xex
+            build/LicenseID.sha256
+            build/BUILD_OUTPUTS.txt
+            build/VERSION.txt
+o "complete=$complete" >> "$GITHUB_OUTPUT"
           echo "Restored state: llvm=$llvm complete=$complete"
 
       - name: Prepare pinned OpenXeChain source

@@ -1,0 +1,28 @@
+iPhoneTether360 - Step 4 verifier carry-over
+============================================
+
+The broad legacy tools/verify_openxechain_source.py is intentionally not
+rewritten during Step 2. Its remaining failing assertions describe older B9C
+release/build assumptions rather than the Step-2 pre-CRT logger.
+
+Remaining stale assertions after Step 2:
+- GitHub Actions publishes finished XEX
+  The verifier searches for the obsolete single B9C artifact name; the current
+  workflow publishes Loader.xex, Core.xex and LicenseID.xex.
+- Apple GET_MACADDR control
+- Apple ENABLE_NCM control
+- Apple CARRIER_CHECK control
+- SET_INTERFACE(2,1) retained
+  These checks search older literal source spellings and need reconciliation
+  against the current tether_driver implementation during the full Step-4
+  symbol/API audit.
+- persistent logger is hard-wired to internal HDD with no USB log paths
+- normal logging uses native HDD writer with HDD-only XAM fallback
+  Those assertions describe the old diagnostic architecture. Current design is
+  emergency Hdd1 pre-CRT persistence followed by app-local Boot.log/Log.txt.
+- XNotify is compile-time gated off by default for system-thread safety
+  This is an old notification-policy assertion and must be reviewed against the
+  current queued notification architecture in Step 4.
+
+Step-2-specific assertions in that legacy verifier now pass, including the
+native ultra-early NtCreateFile/NtWriteFile/NtFlushBuffersFile trace checks.

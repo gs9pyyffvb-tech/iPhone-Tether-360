@@ -40,6 +40,7 @@ public:
     const NetConfig& Config() const { return cfg_; }
     bool IsConfigured() const { return configured_; }
     bool InternetValidated() const { return internetOk_; }
+    bool CopyGatewayMac(BYTE out[6]) const;
     DWORD ResolvedAddress() const { return resolvedIp_; }
 
 private:

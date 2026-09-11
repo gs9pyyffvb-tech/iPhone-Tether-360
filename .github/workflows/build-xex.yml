@@ -40,13 +40,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .openxechain/sysroot
-          key: openxechain-${{ runner.os }}-${{ env.OXC_BUILDSCRIPT_COMMIT }}
+          key: openxechain-complete-ubuntu24-${{ runner.arch }}-v4-${{ env.OXC_BUILDSCRIPT_COMMIT }}
 
       - name: Build pinned OpenXeChain toolchain
         if: steps.oxc-cache.outputs.cache-hit != 'true'
         run: |
           rm -rf .openxechain/buildscript
           mkdir -p .openxechain
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git config --global --add url."https://github.com/".insteadOf "ssh://git@github.com/"
           git clone https://github.com/OpenXeChain/buildscript.git .openxechain/buildscript
           cd .openxechain/buildscript
           git checkout "$OXC_BUILDSCRIPT_COMMIT"

@@ -18,4 +18,3 @@ if flags != expected:
 print('PASS XEX2 magic')
 print('PASS %s module flags 0x%08X' % (kind, flags))
 print('OpenXeChain XEX verifier: PASS')
-'OpenXeChain XEX verifier: PASS')

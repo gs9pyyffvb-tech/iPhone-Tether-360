@@ -113,32 +113,3 @@ bash tools/run_host_validation.sh
 The host suite covers Pair/Trust, NCM, standalone network behavior, B9D frame translation/native bridge tests, recursive C++98 syntax checks for project translation units that do not require the external BearSSL checkout, and all source/static audits.
 
 A clean host/static audit is a **pre-build gate**, not hardware proof. The final PowerPC OpenXeChain build must still succeed, its three generated XEX files must pass structural verification, and then the package must be tested on the target 17559 console/iPhone hardware.
- or ValidatePair success.
-
-## Diagnostics
-
-Detailed output is appended to the first writable path:
-
-1. `Hdd1:\iPhoneTether360.log`
-2. `Usb0:\iPhoneTether360.log`
-3. `Usb1:\iPhoneTether360.log`
-4. `Usb2:\iPhoneTether360.log`
-5. `Usb3:\iPhoneTether360.log`
-
-`DbgPrint` output is retained as well. For the OpenXeChain build, XAM toast notifications are disabled by default because the diagnostic worker is a raw system thread and `XNotifyQueueUI` is not safe from system threads without an additional dashboard/RPC patch. The persistent log is the authoritative failure record. A future user-thread notification bridge can re-enable toasts without touching the USB/networking core.
-
-## Validation
-
-Run:
-
-```bash
-bash tools/run_host_validation.sh
-```
-
-The validation suite covers the portable Pair/Trust and packet code, source-level OpenXeChain compatibility, old-toolchain-reference detection, the recovered USB ABI layout assumptions, and the GitHub build configuration.
-
-The actual console/phone gate is still required because a host test cannot prove kernel patch addresses, live USB transfer timing, XeCrypt behavior on Xenon, or iOS 26.1's physical Pair/Personal-Hotspot responses.
-
-## What remains after 9C
-
-Batch 9D must expose the validated Ethernet path to the stock Xbox networking stack so normal XNet/Winsock/XHTTP/Aurora traffic can use it. The kernel `NicRegisterDevice` path remains the leading integration direction.

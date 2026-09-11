@@ -67,21 +67,3 @@ Useful boundaries are: no emergency entry line = XEX load/entry problem; emergen
 ## 7. Reconnect test
 
 After a successful first connection, unplug the iPhone, confirm `iPhone Disconnected`, reconnect it, confirm persisted `ValidatePair` reuse, and verify the data/licence/native bridge progression returns through `iPhone to Xbox Complete` without restarting the console.
-t/iPhone state problem;
-- carrier ON but no DHCP Offer: Ethernet TX/RX/NCM problem;
-- DHCP succeeds but ARP fails: Ethernet receive/routing issue;
-- ARP succeeds but DNS fails: IPv4/UDP/DNS issue;
-- DNS succeeds but TCP fails: TCP/checksum/remote-path issue;
-- TCP succeeds but no HTTP success: receive sequencing/content issue.
-
-If the console freezes or reboots, preserve the tail of `iPhoneTether360.log` and the last `DbgPrint` line you can capture. OpenXeChain builds deliberately disable XAM toast notifications by default until a safe user-thread notification bridge is added.
-
-## 8. Reconnect smoke test
-
-After a successful run:
-
-1. unplug the iPhone;
-2. wait several seconds;
-3. reconnect it;
-4. confirm `ValidatePair` reuse rather than a fresh identity;
-5. confirm carrier, DHCP and Internet validation return.

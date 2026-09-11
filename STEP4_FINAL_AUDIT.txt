@@ -1,0 +1,115 @@
+iPhoneTether360 1.0.0 — Step 4 Final Pre-Build Audit
+======================================================
+Status: PASS
+Target: Xbox 360 RGH/JTAG, kernel/dashboard 17559
+Toolchain policy: OpenXeChain only
+Final deployable targets: Loader.xex, Core.xex, LicenseID.xex
+
+SCOPE COMPLETED
+---------------
+1. Self-contained build-manifest closure for all three XEX targets.
+2. Stale B9C release/deployment references removed from active build/workflow/docs.
+3. Existing source verifier reconciled to the final three-XEX/B9D architecture.
+4. Per-target duplicate/project-symbol audit added and passed.
+5. Critical OpenXeChain/xecorelib imports, ordinals and signatures audited against the pinned dependency chain.
+6. Core custom CRT/constructor ordering checked against the exact pinned OpenXeChain Newlib crt0 sequence.
+7. Loader -> resident Core relationship and LicenseID title role checked.
+8. PE/XEX structural verification expanded to all three outputs with title/sysdll-specific expectations.
+9. XNotify system-thread safety defect found and corrected by marshalling XAM UI calls through XAM CreateThread when not already in PROC_USER context.
+10. Licensing fail-open policy, CPU-key secrecy, endpoint-log secrecy and exact required notification strings retained.
+11. Workflow pre-build gate now runs build-manifest/Step-4 audits before the expensive OpenXeChain toolchain/XEX build.
+12. Hardware test instructions updated to the final 1.0.0 architecture.
+
+PINNED DEPENDENCY EVIDENCE CHECKED
+---------------------------------
+OpenXeChain buildscript: eed1fa65bf9577fd31625764b320a90182ea9ade
+xecorelib: c65d67e071357acade681f04c46ae9719797f239
+OpenXeChain Newlib: f929633c27099d404e9cb5b2739a9c7f9b6afccc
+SynthXEX: 48d1453a55468aa2f8a211db0b20edd594ef5be3
+LLVM: 890b83f6c8259a8899e182a5f7d9cf39c64131cc
+XboxTLS/BearSSL source: dc0cc21cbf6ae9e75f1974833742f80b45519326
+
+Critical verified xboxkrnl surfaces include ExCreateThread, ExTerminateThread,
+KeGetCurrentProcessType, KeQuerySystemTime, NtClose, NtCreateFile,
+NtFlushBuffersFile, NtWriteFile, XboxKrnlVersion, XeCryptRandom,
+XexGetModuleHandle, XexGetProcedureAddress, XexLoadImage, ExLoadedImageName,
+ExExpansionCall, and the required USBD exports.
+
+Critical verified XAM exports include Ethernet link status ordinal 75,
+Ethernet interception ordinals 109/110/111, XNotifyQueueUI ordinal 656,
+and CreateThread ordinal 1084.
+
+The unexported USB descriptor helpers at 0x800D83A0 and 0x800D8500 remain
+explicit 17559-only reconstructed-kernel ABI. They are contained to the USB
+driver code and are reached only through the 17559-gated initialization path.
+
+VALIDATION RESULTS
+------------------
+Build manifest audit: PASS (31 checks)
+Step 4 audit: PASS (61 checks)
+OpenXeChain migration audit: PASS (79 source/build files scanned)
+OpenXeChain source verifier: PASS (61 checks)
+Step 2 boot-log audit: PASS (31/31)
+Step 3 status logging audit: PASS (57/57)
+B9D/native bridge audit: PASS (64/64)
+Final polish audit: PASS (68/68)
+
+Total explicit static assertions above: 452/452 PASS.
+
+Host functional/regression results from the final validation pass:
+- Batch 9C ipheth/NCM: PASS
+- Batch 9C standalone network + retry/renew: PASS
+- Batch 9B pair session: PASS
+- Batch 9B protocol + persistence: PASS
+- Embedded identity/XeCrypt blob verification: PASS
+- Runtime DeviceCertificate signature/key/extensions verification: PASS
+- B9D frame translation: PASS
+- B9D mocked native bridge: PASS
+- All non-BearSSL project translation units IT360_XBOX C++98 host syntax: PASS
+
+Additional Step-4 checks:
+- Loader target duplicate/project-symbol relocatable link: PASS
+- LicenseID target duplicate/project-symbol relocatable link: PASS
+- Core target duplicate/project-symbol relocatable link: PASS
+- OpenXeChain-only notification branch syntax with pinned-interface stubs: PASS
+- Intentional missing-source manifest rejection: PASS
+- Workflow YAML parse: PASS
+- Build/validation shell syntax: PASS
+- No active proprietary SDK header/declspec dependency: PASS
+- No local reconstruction path leakage in active source/build: PASS
+- No obsolete B9C release artifact in active build/workflow/deployment docs: PASS
+
+REAL ISSUES FOUND AND FIXED DURING STEP 4
+----------------------------------------
+A. build_openxechain.sh still emitted obsolete iPhoneTether360-B9C-OXC aliases.
+   Removed. Final build outputs are only the 1.0.0 Loader/Core/LicenseID set plus metadata/checksums.
+
+B. Only Core had structural verifier calls and those calls did not provide the verifier's required module kind.
+   Fixed. Loader and LicenseID are checked as title PE/XEX; Core is checked as sysdll PE/XEX.
+
+C. XNotifyQueueUI could ultimately execute from Core's raw system worker.
+   This contradicted established Xbox 360 homebrew safety practice.
+   Fixed. PROC_USER callers may dispatch directly; system callers marshal the UI call through XAM CreateThread ordinal 1084.
+
+D. The legacy verifier and hardware/deployment documentation encoded old B9C assumptions.
+   Reconciled to the actual final architecture without weakening the retained Pair/Tether/B9D safety checks.
+
+E. Host validation only syntax-checked top-level src/*.cpp and src/platform/*.cpp.
+   Fixed. It now recursively checks all non-BearSSL project translation units and runs dedicated per-target symbol checks.
+
+GITHUB STATE AT AUDIT TIME
+--------------------------
+The connected repository main branch was still at commit:
+fdf957fe3872a7312d60b225c338915457c95579 (Update hook17559.cpp)
+
+The newest observed Actions run was #33 (run 34415737108), successful on the
+old B9C tree. It proves the pinned OpenXeChain toolchain route worked, but it is
+NOT a build of this Step-4 final tree and is not counted as final 1.0.0 XEX validation.
+
+FINAL GATE
+----------
+Step 4 is complete. This source tree is ready for the final OpenXeChain PowerPC
+build. The final build still must compile/link all three targets, run the PE/XEX
+verifiers on the generated files, produce their checksums, and then be inspected
+before 17559 hardware testing. No claim of final PowerPC or hardware validation
+is made by this pre-build audit.

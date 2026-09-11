@@ -1,0 +1,109 @@
+iPhoneTether360 1.0.0 — Step 1 Source-Tree Integrity Manifest
+Date: 2026-09-11
+
+SCOPE COMPLETED
+- Rebuilt the final app as one self-contained project source tree.
+- Restored unchanged B9B/B9C implementation sources from the complete prior source archive.
+- Applied the later startup/logging overlay and the latest Loader/Core/LicenseID, licensing and B9D source updates.
+- Reconciled stale/missing headers against the retained final implementation files.
+- Removed reliance on local /mnt/data overlay/base paths.
+- Updated the GitHub Actions artifact contract to the final three-XEX layout.
+
+FINAL TARGETS
+- Loader.xex
+- Core.xex (resident sysdll)
+- LicenseID.xex
+
+PROJECT BUILD INPUT CLOSURE
+Loader sources:
+  src/loader/loader_main.cpp
+  src/shared/app_path.cpp
+  src/shared/boot_log.cpp
+  src/shared/notify.cpp
+  src/platform/xbox_platform.cpp
+
+LicenseID sources:
+  src/licenseid/licenseid_main.cpp
+  src/shared/app_path.cpp
+  src/shared/notify.cpp
+  src/platform/xbox_platform.cpp
+  src/license/cpu_key.cpp
+  src/license/license_id.cpp
+  src/sha256.cpp
+
+Core sources:
+  src/entry.cpp
+  src/early_trace.cpp
+  src/platform/xbox_platform.cpp
+  src/shared/app_path.cpp
+  src/plugin.cpp
+  src/diag.cpp
+  src/shared/notify.cpp
+  src/hook17559.cpp
+  src/mux_proto.cpp
+  src/lockdown_probe.cpp
+  src/pair_identity.cpp
+  src/pair_protocol.cpp
+  src/pair_session.cpp
+  src/base64.cpp
+  src/sha256.cpp
+  src/der_x509.cpp
+  src/pair_store.cpp
+  src/pair_crypto_provider.cpp
+  src/usbmux_probe.cpp
+  src/pair_link.cpp
+  src/ipheth_ncm.cpp
+  src/net_stack.cpp
+  src/net_stack_access.cpp
+  src/tether_driver.cpp
+  src/native_net/frame_translate.cpp
+  src/native_net/xnet_bridge.cpp
+  src/license/cpu_key.cpp
+  src/license/license_id.cpp
+  src/license/license_document.cpp
+  src/license/license_runtime.cpp
+  src/tls/b9c_stream.cpp
+  src/tls/sectigo_roots.cpp
+  src/tls/bearssl_https.cpp
+
+RECOVERED / RECONCILED LATE-STAGE CLOSURE FILES
+The exact individual snapshots for several late-stage files were not present in the saved Library export. They were reconstructed from the retained callers/interfaces and the prior audit decisions rather than replaced with placeholders:
+- src/license/cpu_key.cpp + cpu_key.h
+- src/license/license_id.cpp + license_id.h
+- src/net_stack_access.cpp and CopyGatewayMac declaration
+- src/tls/b9c_stream.cpp + b9c_stream.h
+- src/tls/sectigo_roots.cpp + sectigo_roots.h
+- src/tls/bearssl_https.cpp + bearssl_https.h
+- src/tls/deadline.h
+- src/shared/app_path.h
+- src/shared/boot_log.h
+- src/shared/notify.h
+- src/native_net/frame_translate.h
+- src/native_net/xnet_bridge.h
+- src/license/license_document.h
+- src/diag.h was reconciled to the retained newer diag.cpp notification API.
+- src/early_trace.cpp/.h were reconciled to the already-required normal app-local Boot.log/Log.txt path model. The emergency pre-CRT fallback remains Step 2 and was intentionally not added here.
+
+DELIBERATE EXTERNAL BUILD INPUTS (NOT MISSING PROJECT SOURCE)
+- OpenXeChain toolchain/sysroot, supplied through OPENXECHAIN_PREFIX.
+- XboxTLS/BearSSL third-party source pinned by build_openxechain.sh to commit:
+  dc0cc21cbf6ae9e75f1974833742f80b45519326
+These are explicit toolchain/dependency inputs; no iPhoneTether360 project translation unit or project header is fetched from outside this tree.
+
+VALIDATION AT STEP-1 FREEZE
+- Missing source files named by Loader/LicenseID/Core build arrays: 0
+- Missing quoted project headers/includes: 0
+- Local overlay/base absolute path leaks: 0
+- build_openxechain.sh shell syntax: PASS
+- GitHub Actions workflow YAML parse: PASS
+- GitHub Actions artifact contract includes Loader.xex/Core.xex/LicenseID.xex: PASS
+- All project C++ translation units: host syntax PASS (BearSSL API surface stubbed only for local syntax parsing; target API verification remains part of the wider audit)
+- B9D frame host test: PASS
+- B9D bridge host test: PASS
+- B9D audit: 64/64 PASS
+- Existing final-polish audit: 68/68 PASS
+
+STEP 1 STATUS: COMPLETE
+
+NEXT AUDIT SCOPE (NOT IMPLEMENTED BY THIS STEP)
+Step 2: harden Boot.log from the first possible pre-CRT instruction boundary with an emergency fallback, then switch to the normal application-directory Boot.log once Core resolves its path.

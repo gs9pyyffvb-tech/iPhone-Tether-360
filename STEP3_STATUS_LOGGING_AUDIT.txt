@@ -1,0 +1,105 @@
+iPhoneTether360 Step 3 — Exact status/error logging audit
+=========================================================
+Status: COMPLETE
+Scope: diagnostics only; no networking/licensing policy or architecture redesign.
+
+Implemented
+-----------
+1. Module/ordinal resolution
+   - ResolveModuleOrdinal optionally returns ResolveStatus.
+   - XexGetModuleHandle and XexGetProcedureAddress NTSTATUS values are preserved.
+   - success-with-NULL module/procedure is distinguished from an OS error.
+
+2. Thread creation
+   - StartDetachedThread optionally returns ThreadStartStatus.
+   - ExCreateThread NTSTATUS is preserved.
+   - allocation failure and success-with-NULL thread handle are identified without inventing NTSTATUS.
+   - NtClose(thread handle) NTSTATUS is retained as a cleanup diagnostic.
+
+3. Loader/Core startup
+   - Loader records Core module lookup statuses and XexLoadImage status.
+   - Loader and LicenseID record application-path resolver operation/status.
+   - Core early path handoff preserves resolver failure status.
+
+4. Native Boot.log/emergency file I/O
+   - NtCreateFile, NtWriteFile, NtFlushBuffersFile and NtClose failures report exact NTSTATUS.
+   - IO_STATUS_BLOCK.Status is checked as well as the direct system-call return.
+   - malformed/zero-progress writes remain separately identifiable internal failures.
+
+5. XAM file wrappers
+   - failed WriteFile/ReadFile/CloseHandle operations identify their exact operation/result.
+   - no fake NTSTATUS is emitted where xecorelib exposes only BOOL/handle semantics.
+   - no new GetLastError dependency was introduced.
+
+6. USB/usbmux/ipheth
+   - per-ordinal USB export resolution preserves resolver operation/NTSTATUS.
+   - async transfer submission results are retained.
+   - control/Bulk IN/Bulk OUT completion statuses are retained.
+   - endpoint open NTSTATUS values are retained.
+   - endpoint/default-endpoint/remove-device cleanup NTSTATUS values are retained.
+   - tether and trust-retry worker creation now preserves thread diagnostics.
+
+7. Native XNet bridge
+   - XAM ordinals 75/109/110/111 resolve through a diagnostic wrapper.
+   - callback registration return value is retained.
+   - Ethernet link-status return value is retained.
+   - no timing-sensitive packet callback was changed to perform logging or file I/O.
+
+8. Pairing crypto and CPU-key licensing identity
+   - XeCrypt export resolver failures preserve operation/NTSTATUS.
+   - ExExpansionCall resolver failure is propagated through CpuKeyDiagnostic.
+   - invalid HVPP fuse-read sentinel is identified as a stage with no fabricated OS status.
+   - CPU key and fuse values are never logged.
+
+9. HTTPS licensing diagnostics
+   - FetchFixedLicenceFile returns an optional HttpsFetchDiagnostic.
+   - DNS, TCP connect, trust-anchor, TLS reset/write/flush/read, HTTP header/status/body stages are distinguished.
+   - BearSSL engine errors are captured for TLS failures.
+   - non-200 HTTP response code is captured as the real protocol status.
+   - hostname/repository/path are not copied into runtime diagnostic logs.
+
+10. LicenseID utility
+   - path and CPU-key resolver failures carry available NTSTATUS values.
+   - CreateFileA/WriteFile failures are identified explicitly as status unavailable rather than assigned a made-up code.
+
+Validation
+----------
+STEP3 AUDIT: 57/57 PASS
+STEP2 BOOT LOG AUDIT: 31/31 PASS
+STEP17 B9D AUDIT: 64/64 PASS
+FINAL POLISH AUDIT: 68/68 PASS
+OpenXeChain migration audit: PASS (79 source/build files scanned)
+Step17 frame test: PASS
+Step17 mocked native bridge test: PASS
+Changed-source GNU++98 syntax pass: PASS
+GitHub Actions workflow YAML parse: PASS
+build_openxechain.sh shell syntax: PASS
+
+The host validation suite also reached and passed:
+- Batch 9C ipheth/NCM tests
+- Batch 9C standalone network end-to-end + retry/renew tests
+- Batch 9B pair-session tests
+- Batch 9B protocol + persistence tests
+- Batch 9B embedded identity + XeCrypt blob verification
+- Batch 9B runtime DeviceCertificate verification
+- all IT360_XBOX source-unit C++98 host syntax
+- OpenXeChain migration audit
+
+Known legacy verifier assertions intentionally deferred to Step 4
+---------------------------------------------------------------
+The old tools/verify_openxechain_source.py is a literal/policy verifier from the earlier B9C build. It currently reports 9 stale assertions after the newer final architecture and diagnostic wrappers:
+- 17559 fail-closed kernel gate retained (literal matcher no longer recognizes KernelBuild(&diagnostic))
+- GitHub Actions publishes finished XEX (expects old artifact convention)
+- Apple GET_MACADDR control (old literal matcher)
+- Apple ENABLE_NCM control (old literal matcher)
+- Apple CARRIER_CHECK control (old literal matcher)
+- SET_INTERFACE(2,1) retained (old literal matcher)
+- persistent logger hard-wired to internal HDD with no USB log paths (obsolete logging policy)
+- normal logging uses native HDD writer with HDD-only XAM fallback (obsolete logging policy)
+- XNotify compile-time gated off by default for system-thread safety (obsolete notification policy)
+
+These are not runtime test failures. Step 4 is the planned full symbol/API/build-manifest/verifier reconciliation pass.
+
+Not performed in Step 3
+-----------------------
+No full OpenXeChain PowerPC/XEX build was triggered. The expensive clean target build remains part of the final post-Step-4 acceptance pass.

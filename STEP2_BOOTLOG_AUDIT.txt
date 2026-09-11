@@ -1,0 +1,73 @@
+iPhoneTether360 1.0.0 - Final Audit Step 2
+===========================================
+
+STATUS: COMPLETE
+
+Purpose
+-------
+Guarantee useful Core startup evidence before OpenXeChain CRT/global constructor
+initialisation and before the Core can resolve its application directory.
+
+Persistence phases
+------------------
+1. Emergency / pre-CRT
+   Native path:  \\Device\\Harddisk0\\Partition1\\iPhoneTether360.log
+   Visible path: Hdd1:\\iPhoneTether360.log
+
+   - The first _start checkpoint is issued before crtinit().
+   - NtCreateFile opens append-only with synchronous semantics.
+   - NtWriteFile persists each checkpoint.
+   - NtFlushBuffersFile is called after each persisted checkpoint.
+   - NtClose closes a failed/emergency handle.
+   - No heap allocation, std::string, CreateFileA, or CRT file wrapper is used by
+     the emergency writer.
+   - A fixed 8192-byte BSS replay buffer also captures the pre-handoff trace.
+   - DbgPrint remains an additional diagnostic channel.
+
+2. App-directory handoff
+   Normal boot log: <application directory>\\Boot.log
+   Runtime log:     <application directory>\\Log.txt
+
+   - Core resolves its application directory only after crtinit() and global
+     constructors complete.
+   - The normal Boot.log is opened before routing changes.
+   - Buffered emergency checkpoints are replayed into Boot.log between explicit
+     PRE-CRT EMERGENCY TRACE REPLAY markers.
+   - Replay is flushed before normal routing is enabled.
+   - The emergency HDD file receives an explicit EARLY HANDOFF marker and is
+     then closed.
+   - All later BootCheckpoint/early-trace messages go to app-local Boot.log.
+
+Failure behaviour
+-----------------
+- If Core freezes before app-directory resolution, Hdd1:\\iPhoneTether360.log
+  contains the last successfully flushed early checkpoint.
+- If the emergency file cannot open but Core later reaches normal path setup,
+  the fixed RAM replay buffer still transfers the early trace to Boot.log.
+- If normal Boot.log open/replay/handoff fails, routing remains on the emergency
+  HDD trace rather than silently losing subsequent boot checkpoints.
+- FailureCount() and LastStatus() remain available to later diagnostics.
+
+Validation
+----------
+- tools/audit_step2.py: 31/31 PASS
+- tools/audit_openxechain_port.py: PASS
+- tools/audit_step17.py: 64/64 PASS
+- tools/audit_final_polish.py: 68/68 PASS
+- Step-2 changed C++98 host syntax: PASS
+- build_openxechain.sh shell syntax: PASS
+- GitHub workflow YAML parse: PASS
+
+Minor regression-harness cleanup
+--------------------------------
+src/platform/xbox_platform.cpp host-only MonotonicMs() return was changed from
+0ULL to static_cast<uint64_t>(0). This is behaviourally identical and removes a
+pre-existing -std=c++98 -pedantic warning that prevented the host validation
+suite from reaching later checks.
+
+Not part of Step 2
+------------------
+The broad legacy tools/verify_openxechain_source.py still contains assertions
+for older B9C artifact names/diagnostic architecture. Updating all of those
+stale assertions belongs to the Step 4 full symbol/API/build-manifest audit and
+is not evidence of a Step-2 logging failure.

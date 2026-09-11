@@ -88,6 +88,7 @@ git -C "$XBOXTLS_DIR" checkout -q "$XBOXTLS_COMMIT"
 # BearSSL with KeQuerySystemTime explicitly, so prevent libc time() from becoming
 # an implicit trust dependency.
 sed -i 's/^#define BR_USE_UNIX_TIME   1$/#define BR_USE_UNIX_TIME   0/' "$XBOXTLS_DIR/SSL/config.h"
+sed -i 's|inc\\bearssl.h|inc/bearssl.h|g' "$XBOXTLS_DIR/SSL/inner.h"
 
 COMMON_CXXFLAGS=(
     --target=ppc32-xbox360

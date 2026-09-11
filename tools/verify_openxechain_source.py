@@ -416,10 +416,12 @@ want(
 want(
     'PhoneNotice' in diag and 'QueueNotification' in diag and
     'ResolveModuleOrdinal("xam.xex", 656u' in notify and
-    'KeGetCurrentProcessType()' in notify and
+    'ShowTitle' in notify and 'ShowSystem' in notify and
+    'KeGetCurrentProcessType' not in notify and
     'ResolveModuleOrdinal("xam.xex", 1084u' in notify and
-    'UserNotifyThread' in notify,
-    'XNotify is queued and marshalled to XAM user-thread context from system workers'
+    'SystemNotifyThread' in notify and
+    'it360_notify::ShowSystem' in diag,
+    'XNotify has separate direct-title and always-marshalled Core system paths'
 )
 
 want(

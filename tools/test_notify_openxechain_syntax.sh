@@ -13,7 +13,6 @@ typedef uint32_t NTSTATUS;
 #ifdef __cplusplus
 extern "C" {
 #endif
-NTSTATUS KeGetCurrentProcessType(void);
 NTSTATUS NtClose(HANDLE);
 void DbgPrint(const char*, ...);
 #ifdef __cplusplus

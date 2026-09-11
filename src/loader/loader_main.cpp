@@ -118,7 +118,7 @@ static bool CoreAlreadyResident() {
 static int Fail(const char* log_line, const char* notification) {
     LogLine(log_line);
     LogLine("LOADER07A | About to show failure notification");
-    const bool shown = it360_notify::Show(notification);
+    const bool shown = it360_notify::ShowTitle(notification);
     LogLine(shown
         ? "LOADER07B | Failure notification returned success"
         : "LOADER07B | Failure notification returned failure");
@@ -138,7 +138,7 @@ int main() {
     }
 
     LogLine("LOADER01 | About to show startup notification");
-    const bool startup_shown = it360_notify::Show("Starting iPhoneTether360...");
+    const bool startup_shown = it360_notify::ShowTitle("Starting iPhoneTether360...");
     LogLine(startup_shown
         ? "LOADER02 | Startup notification returned success"
         : "LOADER02 | Startup notification returned failure");
@@ -146,7 +146,7 @@ int main() {
     LogLine("LOADER03 | Checking for resident Core");
     if (CoreAlreadyResident()) {
         LogLine("LOADER04 | Core already resident; duplicate load blocked");
-        const bool shown = it360_notify::Show("iPhoneTether360 Already Running");
+        const bool shown = it360_notify::ShowTitle("iPhoneTether360 Already Running");
         LogLine(shown
             ? "LOADER04A | Already-running notification returned success"
             : "LOADER04A | Already-running notification returned failure");

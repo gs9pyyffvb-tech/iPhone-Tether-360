@@ -112,7 +112,7 @@ static bool WriteIdFile(const char* path, const char id[65]) {
 
 static int FailWithNotification(const char* log_line, const char* notification) {
     LogLine(log_line);
-    const bool shown = it360_notify::Show(notification);
+    const bool shown = it360_notify::ShowTitle(notification);
     LogLine(shown
         ? "LICFAIL | Failure notification returned success"
         : "LICFAIL | Failure notification returned failure");
@@ -180,9 +180,11 @@ int main() {
     display[p] = 0;
 
     LogLine("LIC05 | About to show LicenseID notifications");
-    const bool title_shown = it360_notify::Show("iPhoneTether360 License ID");
-    const bool id_shown = it360_notify::Show(display);
-    const bool saved_shown = it360_notify::Show("Saved to LicenseID.txt");
+    const bool title_shown = it360_notify::ShowTitle("iPhoneTether360 License ID");
+    it360_platform::SleepMs(2500u);
+    const bool id_shown = it360_notify::ShowTitle(display);
+    it360_platform::SleepMs(2500u);
+    const bool saved_shown = it360_notify::ShowTitle("Saved to LicenseID.txt");
     LogLine(title_shown && id_shown && saved_shown
         ? "LIC06 | LicenseID notifications returned success"
         : "LIC06 | One or more LicenseID notifications returned failure");

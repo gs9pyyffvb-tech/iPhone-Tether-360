@@ -75,11 +75,11 @@ ck('typedef uint32_t (*ThreadFn)(void* context)' in ph and 'ExCreateThread' in p
    'detached worker thunk matches project DWORD(void*) contract and terminates explicitly')
 ck('typedef HANDLE (*XamCreateThreadFn)(void*, DWORD, UserThreadProcFn, void*, DWORD, DWORD*)' in notify,
    'XAM CreateThread typedef matches six-argument Win32/Xbox thread contract')
-ck('static_cast<DWORD>(KeGetCurrentProcessType()) == kUserProcessType' in notify and 'kUserProcessType = 1u' in notify,
-   'notification layer distinguishes PROC_USER=1 before XAM UI call')
-ck('UserNotifyThread' in notify and 'DirectShowWide' in notify and '1084u' in notify,
-   'system-worker notifications marshal through a XAM-created user thread')
-ck('QueueNotification' in diag and 'it360_notify::Show' in diag, 'Core runtime queues notifications before UI dispatch')
+ck('KeGetCurrentProcessType' not in notify and 'ShowTitle' in notify and 'ShowSystem' in notify,
+   'notification layer uses explicit title/system contexts without process guessing')
+ck('SystemNotifyThread' in notify and 'DirectShowWide' in notify and '1084u' in notify,
+   'system-worker notifications always marshal through a XAM-created user thread')
+ck('QueueNotification' in diag and 'it360_notify::ShowSystem' in diag, 'Core runtime queues notifications before system UI dispatch')
 ck('XNotifyQueueUI' not in mux and 'XNotifyQueueUI' not in tether, 'USB callbacks never call XNotify directly')
 
 # CPU key/licence/TLS safety.

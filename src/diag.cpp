@@ -223,6 +223,11 @@ static void QueueNotification(unsigned phone_connection, unsigned kind, const ch
     Unlock();
 }
 
+static void SystemNotifyTrace(const char* text) {
+    if (!text || !text[0]) return;
+    Log("[iPhoneTether360:NOTIFY-SYSTEM] %s\r\n", text);
+}
+
 static void ReportDroppedLogs() {
     const LONG dropped = it360_platform::AtomicExchange(&gDroppedLogs, 0);
     if (dropped <= 0) return;
@@ -252,7 +257,7 @@ static uint32_t Worker(void*) {
         if (NotifyDue()) {
             char note[kNotifyMax];
             if (PopNotify(note, sizeof(note))) {
-                it360_notify::Show(note);
+                it360_notify::ShowSystem(note);
                 MarkNotifyShown(note);
             }
         }
@@ -300,6 +305,7 @@ void Init() {
         return;
     }
 
+    it360_notify::SetSystemTrace(&SystemNotifyTrace);
     gLogSessionStartMs = it360_platform::MonotonicMs();
     gNextNotifyMs = 0;
     gFallbackNotifyTicks = 0;

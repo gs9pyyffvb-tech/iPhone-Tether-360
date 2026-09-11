@@ -55,8 +55,9 @@ for message in [
 
 # Queue/readability and stale-state handling.
 require("2.5 second queued notification gap", "kNotifyGapMs = 2500ULL" in diag)
-require("2.5 second direct notification gap", "kDirectNotifyGapMs = 2500ULL" in notify)
-require("direct notifier waits for readable gap", "WaitForReadableGap" in notify)
+require("title notifier has no hidden timing layer", "kDirectNotifyGapMs" not in notify and "WaitForReadableGap" not in notify)
+require("title notifier uses direct standard XNotify tuple", "ShowTitle" in notify and "notify(14u, 0u, 2u" in notify)
+require("Core notifier has explicit system-thread path", "ShowSystem" in notify and "SystemNotifyThread" in notify)
 require("phone notices carry session id", "phoneConnection" in diag and "BeginPhoneNotifications" in diag_h)
 require("phone disconnect invalidates pending notices", "EndPhoneNotifications" in tether and "RemovePhoneNotificationsUnlocked" in diag)
 require("stale phone notices dropped before display", "const bool stale" in diag and "slot->phoneConnection != active" in diag)
@@ -98,10 +99,10 @@ require("Boot.log remains app-local", 'AppendLeaf(gAppDirectory, "Boot.log"' in 
 # LicenseID presentation/persistence.
 require("LicenseID truncates old output", "OpenTruncate(path)" in licenseid)
 require("LicenseID writes only 64-char hash", "WriteAll(file, id, 64u)" in licenseid)
-require("LicenseID title notification", 'Show("iPhoneTether360 License ID")' in licenseid)
+require("LicenseID title notification", 'ShowTitle("iPhoneTether360 License ID")' in licenseid)
 require("LicenseID full ID notification", '"License ID: "' in licenseid)
-require("LicenseID saved notification", 'Show("Saved to LicenseID.txt")' in licenseid)
-require("LicenseID direct notifications are serialized", "WaitForReadableGap" in notify)
+require("LicenseID saved notification", 'ShowTitle("Saved to LicenseID.txt")' in licenseid)
+require("LicenseID direct notifications are explicitly spaced", licenseid.count("SleepMs(2500u)") == 2)
 
 # Privacy and v1 simplicity.
 for path in ["src/diag.cpp", "src/plugin.cpp", "src/tether_driver.cpp", "src/shared/notify.cpp", "src/loader/loader_main.cpp"]:

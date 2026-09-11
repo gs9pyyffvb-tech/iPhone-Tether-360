@@ -237,7 +237,7 @@ IT360_SYSRNG_EOF
 SYSRNG_OBJECT="$BUILD/obj/bearssl/it360_sysrng.o"
 echo "CC  [bearssl] OpenXeChain system-seder shim"
 "$CC" "${BEARSSL_CFLAGS[@]}" -c "$SYSRNG_SHIM" -o "$SYSRNG_OBJECT"
-BEARSL_OBJECTS+=("$SYSRNG_OBJECT")
+BEARSSL_OBJECTS+=("$SYSRNG_OBJECT")
 
 if [[ ${#BEARSSL_OBJECTS[@]} -eq 0 ]]; then
     echo "ERROR: no BearSSL sources were compiled" >&2

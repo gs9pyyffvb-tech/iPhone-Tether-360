@@ -1,145 +1,184 @@
 #include "platform/xbox_platform.h"
-#include "shared/app_path.h"
-#include "shared/boot_log.h"
 #include "shared/notify.h"
 #include "shared/version.h"
 
 namespace {
 
+#if defined(IT360_XBOX) && defined(IT360_OPENXECHAIN)
 static const DWORD kResidentSystemDllFlags = 0x0000000Au;
+#endif
+static const char kBootLogPath[] = "game:\\Boot.log";
+#if defined(IT360_XBOX) && defined(IT360_OPENXECHAIN)
+static char kCorePath[] = "game:\\Core.xex";
+#endif
 
-static bool CoreAlreadyResident(const char* absolute_core_path) {
+static size_t TextLength(const char* text) {
+    if (!text) return 0;
+    size_t n = 0;
+    while (text[n]) ++n;
+    return n;
+}
+
+static bool WriteRecord(it360_platform::FileHandle file, const char* text) {
+    if (!file || !text) return false;
+    const size_t length = TextLength(text);
+    if (length && !it360_platform::WriteAll(file, text, length)) return false;
+    return it360_platform::WriteAll(file, "\r\n", 2u);
+}
+
+static bool BeginLog() {
+    it360_platform::FileHandle file = it360_platform::OpenTruncate(kBootLogPath);
+    if (!file) return false;
+
+    bool ok = true;
+    ok = WriteRecord(file, "============================================================") && ok;
+    ok = WriteRecord(file, IT360_PRODUCT_VERSION " Loader session") && ok;
+    ok = WriteRecord(file, "============================================================") && ok;
+    ok = WriteRecord(file, "LOADER00 | Loader main entered") && ok;
+    it360_platform::CloseFile(file);
+    return ok;
+}
+
+static void LogLine(const char* text) {
+    if (!text) return;
+    it360_platform::FileHandle file = it360_platform::OpenAppend(kBootLogPath);
+    if (!file) {
+        DbgPrint("[iPhoneTether360:LOADER] could not append game:\\Boot.log\n");
+        return;
+    }
+    if (!WriteRecord(file, text))
+        DbgPrint("[iPhoneTether360:LOADER] Boot.log write failed\n");
+    it360_platform::CloseFile(file);
+}
+
+#if defined(IT360_XBOX) && defined(IT360_OPENXECHAIN)
+static char HexDigit(unsigned value) {
+    return value < 10u ? static_cast<char>('0' + value)
+                       : static_cast<char>('A' + value - 10u);
+}
+
+static void LogHex32(const char* prefix, uint32_t value) {
+    char line[128];
+    size_t p = 0;
+    if (prefix) {
+        while (prefix[p] && p + 11u < sizeof(line)) {
+            line[p] = prefix[p];
+            ++p;
+        }
+    }
+    if (p + 10u >= sizeof(line)) return;
+    line[p++] = '0';
+    line[p++] = 'x';
+    for (int shift = 28; shift >= 0; shift -= 4)
+        line[p++] = HexDigit((value >> shift) & 0xFu);
+    line[p] = 0;
+    LogLine(line);
+}
+
+#endif
+
+static int TerminateTitle(int result, const char* final_line) {
+    if (final_line) LogLine(final_line);
+#if defined(IT360_XBOX) && defined(IT360_OPENXECHAIN)
+    XamLoaderTerminateTitle();
+#endif
+    return result;
+}
+
+static bool CoreAlreadyResident() {
 #if defined(IT360_XBOX) && defined(IT360_OPENXECHAIN)
     HMODULE module = 0;
     NTSTATUS status = XexGetModuleHandle("Core.xex", &module);
-    it360_boot_log::Hex32("LOADER03A | XexGetModuleHandle(Core.xex) NTSTATUS = ", static_cast<uint32_t>(status));
+    LogHex32("LOADER03A | XexGetModuleHandle(Core.xex) NTSTATUS = ",
+             static_cast<uint32_t>(status));
     if (!it360_platform::FailedStatus(status) && module) return true;
     if (!it360_platform::FailedStatus(status) && !module)
-        it360_boot_log::Line("LOADER03A | XexGetModuleHandle(Core.xex) returned success with NULL module");
+        LogLine("LOADER03A | XexGetModuleHandle(Core.xex) returned success with NULL module");
 
     module = 0;
     status = XexGetModuleHandle("Core.exe", &module);
-    it360_boot_log::Hex32("LOADER03B | XexGetModuleHandle(Core.exe) NTSTATUS = ", static_cast<uint32_t>(status));
+    LogHex32("LOADER03B | XexGetModuleHandle(Core.exe) NTSTATUS = ",
+             static_cast<uint32_t>(status));
     if (!it360_platform::FailedStatus(status) && module) return true;
     if (!it360_platform::FailedStatus(status) && !module)
-        it360_boot_log::Line("LOADER03B | XexGetModuleHandle(Core.exe) returned success with NULL module");
+        LogLine("LOADER03B | XexGetModuleHandle(Core.exe) returned success with NULL module");
 
-    if (absolute_core_path && absolute_core_path[0]) {
-        module = 0;
-        status = XexGetModuleHandle(absolute_core_path, &module);
-        it360_boot_log::Hex32("LOADER03C | XexGetModuleHandle(absolute Core.xex) NTSTATUS = ", static_cast<uint32_t>(status));
-        if (!it360_platform::FailedStatus(status) && module) return true;
-        if (!it360_platform::FailedStatus(status) && !module)
-            it360_boot_log::Line("LOADER03C | XexGetModuleHandle(absolute Core.xex) returned success with NULL module");
-    }
-
-    return false;
-#else
-    (void)absolute_core_path;
-    return false;
+    module = 0;
+    status = XexGetModuleHandle(kCorePath, &module);
+    LogHex32("LOADER03C | XexGetModuleHandle(game:\\Core.xex) NTSTATUS = ",
+             static_cast<uint32_t>(status));
+    if (!it360_platform::FailedStatus(status) && module) return true;
+    if (!it360_platform::FailedStatus(status) && !module)
+        LogLine("LOADER03C | XexGetModuleHandle(game:\\Core.xex) returned success with NULL module");
 #endif
+    return false;
 }
 
+#if defined(IT360_XBOX) && defined(IT360_OPENXECHAIN)
 static int Fail(const char* log_line, const char* notification) {
-    it360_boot_log::Line(log_line);
-    it360_notify::Show(notification);
-    it360_boot_log::Line("LOADER | Returning to Aurora after failure");
-    it360_boot_log::Close();
-    return 1;
+    LogLine(log_line);
+    LogLine("LOADER07A | About to show failure notification");
+    const bool shown = it360_notify::Show(notification);
+    LogLine(shown
+        ? "LOADER07B | Failure notification returned success"
+        : "LOADER07B | Failure notification returned failure");
+    return TerminateTitle(1, "LOADER08 | Terminating Loader title after failure");
 }
+#endif
 
 } // namespace
 
 int main() {
-    char app_directory[512];
-    char boot_log_path[560];
-    char core_path[560];
-
-    it360_notify::Show("Starting iPhoneTether360...");
-
-    it360_platform::ResolveStatus app_path_status;
-    if (!it360_app_path::ResolveAppDirectory(app_directory, sizeof(app_directory), &app_path_status)) {
-        if (app_path_status.operation != it360_platform::ResolveOperationNone) {
-            if (app_path_status.has_status)
-                DbgPrint("[iPhoneTether360:LOADER] app path failed operation=%s NTSTATUS=0x%08x\n",
-                         it360_platform::ResolveOperationName(app_path_status.operation),
-                         static_cast<unsigned>(app_path_status.status));
-            else
-                DbgPrint("[iPhoneTether360:LOADER] app path failed operation=%s status=unavailable\n",
-                         it360_platform::ResolveOperationName(app_path_status.operation));
-        } else {
-            DbgPrint("[iPhoneTether360:LOADER] app path failed after image-path resolution; no OS status returned\n");
-        }
-        it360_notify::Show("iPhoneTether360: App path not found");
+    if (!BeginLog()) {
+        DbgPrint("[iPhoneTether360:LOADER] could not create game:\\Boot.log\n");
+#if defined(IT360_XBOX) && defined(IT360_OPENXECHAIN)
+        XamLoaderTerminateTitle();
+#endif
         return 1;
     }
 
-    if (!it360_app_path::Join(app_directory, "Boot.log", boot_log_path, sizeof(boot_log_path))) {
-        it360_notify::Show("iPhoneTether360: Boot.log path failed");
-        return 1;
-    }
+    LogLine("LOADER01 | About to show startup notification");
+    const bool startup_shown = it360_notify::Show("Starting iPhoneTether360...");
+    LogLine(startup_shown
+        ? "LOADER02 | Startup notification returned success"
+        : "LOADER02 | Startup notification returned failure");
 
-    uint32_t boot_open_status = 0;
-    if (!it360_boot_log::Open(boot_log_path, &boot_open_status)) {
-        if (boot_open_status)
-            DbgPrint("[iPhoneTether360:LOADER] NtCreateFile(Boot.log) failed status=0x%08x\n",
-                     static_cast<unsigned>(boot_open_status));
-        else
-            DbgPrint("[iPhoneTether360:LOADER] NtCreateFile(Boot.log) did not produce a usable handle | status=unavailable\n");
-        it360_notify::Show("iPhoneTether360: Boot.log could not be opened");
-        return 1;
-    }
-
-    it360_boot_log::Line("");
-    it360_boot_log::Line("============================================================");
-    it360_boot_log::Line(IT360_PRODUCT_VERSION " Loader session");
-    it360_boot_log::Line("============================================================");
-    it360_boot_log::Line("LOADER00 | Loader entered");
-    it360_boot_log::Line("LOADER01 | App directory resolved");
-    it360_boot_log::Line("LOADER02 | Startup indication queued");
-
-    if (!it360_app_path::Join(app_directory, "Core.xex", core_path, sizeof(core_path))) {
-        return Fail("LOADER03 | Core path construction failed",
-                    "iPhoneTether360: Core path failed");
-    }
-
-    it360_boot_log::Line("LOADER03 | Checking for resident Core");
-    if (CoreAlreadyResident(core_path)) {
-        it360_boot_log::Line("LOADER04 | Core already resident; duplicate load blocked");
-        it360_notify::Show("iPhoneTether360 Already Running");
-        it360_boot_log::Line("LOADER05 | Returning to Aurora");
-        it360_boot_log::Close();
-        return 0;
+    LogLine("LOADER03 | Checking for resident Core");
+    if (CoreAlreadyResident()) {
+        LogLine("LOADER04 | Core already resident; duplicate load blocked");
+        const bool shown = it360_notify::Show("iPhoneTether360 Already Running");
+        LogLine(shown
+            ? "LOADER04A | Already-running notification returned success"
+            : "LOADER04A | Already-running notification returned failure");
+        return TerminateTitle(0, "LOADER08 | Terminating Loader title and returning to Aurora");
     }
 
 #if defined(IT360_XBOX) && defined(IT360_OPENXECHAIN)
     HMODULE core_module = 0;
-    it360_boot_log::Line("LOADER04 | Core not resident");
-    it360_boot_log::Line("LOADER05 | Calling XexLoadImage for Core.xex");
+    LogLine("LOADER04 | Core not resident");
+    LogLine("LOADER05 | Calling XexLoadImage for Core.xex");
+    LogLine("LOADER05A | Core path = game:\\Core.xex");
 
     const NTSTATUS status = XexLoadImage(
-        core_path,
+        kCorePath,
         kResidentSystemDllFlags,
         0u,
         &core_module
     );
 
-    it360_boot_log::Hex32("LOADER06 | XexLoadImage status = ", static_cast<uint32_t>(status));
+    LogHex32("LOADER06 | XexLoadImage status = ", static_cast<uint32_t>(status));
+    LogHex32("LOADER06A | Core module handle = ", it360_platform::Address32(core_module));
 
     if (it360_platform::FailedStatus(status) || !core_module) {
         if (!it360_platform::FailedStatus(status) && !core_module)
-            it360_boot_log::Line("LOADER07 | XexLoadImage returned success with NULL module");
+            LogLine("LOADER07 | XexLoadImage returned success with NULL module");
         return Fail("LOADER07 | Core load failed after XexLoadImage",
                     "iPhoneTether360: Core failed to load");
     }
 
-    it360_boot_log::Line("LOADER07 | Core load succeeded");
-    it360_boot_log::Line("LOADER08 | Returning to Aurora");
-    it360_boot_log::Close();
-    return 0;
+    LogLine("LOADER07 | Core load succeeded");
+    return TerminateTitle(0, "LOADER08 | Terminating Loader title and returning to Aurora");
 #else
-    it360_boot_log::Line("LOADER04 | Host syntax path complete");
-    it360_boot_log::Close();
-    return 0;
+    return TerminateTitle(0, "LOADER04 | Host syntax path complete");
 #endif
 }

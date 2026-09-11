@@ -140,7 +140,6 @@ compile_cpp_set() {
 
 LOADER_SOURCES=(
     src/loader/loader_main.cpp
-    src/shared/app_path.cpp
     src/shared/boot_log.cpp
     src/shared/notify.cpp
     src/platform/xbox_platform.cpp
@@ -148,7 +147,6 @@ LOADER_SOURCES=(
 
 LICENSEID_SOURCES=(
     src/licenseid/licenseid_main.cpp
-    src/shared/app_path.cpp
     src/shared/notify.cpp
     src/platform/xbox_platform.cpp
     src/license/cpu_key.cpp
@@ -268,9 +266,8 @@ link_title() {
     local xex="$BUILD/$name.xex"
     echo "================================================================"
     echo "LINK title $pe"
-    "$CXX" --target=ppc32-xbox360 "$@" -o "$pe" \
-        -Wl,/subsystem:xbox360 \
-        -Wl,/entry:_start \
+    "$CXX" "$@" -o "$pe" \
+        -Wl,/opt:ref \
         -Wl,/errorlimit:0
     if [[ -f "$ROOT/tools/verify_openxechain_pe.py" ]]; then
         python3 "$ROOT/tools/verify_openxechain_pe.py" "$pe" title

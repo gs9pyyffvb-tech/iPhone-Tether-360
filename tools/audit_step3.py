@@ -52,7 +52,7 @@ check('No unverified GetLastError dependency introduced', 'GetLastError' not in 
 
 check('Loader logs Core module lookup status', loader.count('XexGetModuleHandle(') >= 6 and 'NTSTATUS =' in loader)
 check('Loader logs XexLoadImage status', 'XexLoadImage status = ' in loader)
-check('Loader app-path resolver has diagnostic', 'ResolveAppDirectory(app_directory, sizeof(app_directory), &app_path_status)' in loader)
+check('Loader foreground title uses game path with persistent startup diagnostics', all(x in loader for x in ('kBootLogPath', 'Boot.log', 'kCorePath', 'Core.xex', 'LOADER00 | Loader main entered')) and 'game:' in loader and 'ResolveAppDirectory' not in loader)
 check('Boot log exposes open NTSTATUS', 'uint32_t* ntstatus_out' in text('src/shared/boot_log.h') and 'NtCreateFile failed NTSTATUS' in boot)
 check('Boot log checks IO_STATUS_BLOCK on create', 'FailedStatus(io.Status)' in boot)
 check('Boot log logs NtWriteFile status and IO status', 'NtWriteFile failed NTSTATUS' in boot and 'io_status=' in boot)
@@ -91,7 +91,7 @@ check('CPU-key diagnostic type exists', 'struct CpuKeyDiagnostic' in cpu_h and '
 check('CPU-key resolver status is preserved', 'CpuKeyFailureResolveExpansionCall' in cpu and '&resolve' in cpu)
 check('CPU-key invalid fuse read is identified without values', 'CpuKeyFailureInvalidFuseRead' in cpu)
 check('Licence-ID forwards CPU diagnostic', 'CpuKeyDiagnostic* diagnostic' in license_id_h and 'ReadCpuKey(key, diagnostic)' in license_id)
-check('LicenseID app reports path resolver status', 'path resolve failed' in licenseid_main and 'NTSTATUS=0x%08x' in licenseid_main)
+check('LicenseID foreground utility uses game paths with persistent diagnostics', all(x in licenseid_main for x in ('kLogPath', 'LicenseID.log', 'kOutputPath', 'LicenseID.txt', 'LIC00 | LicenseID main entered')) and 'game:' in licenseid_main and 'ResolveAppDirectory' not in licenseid_main)
 check('LicenseID app reports CPU access diagnostic', 'CPU key access unavailable | operation=' in licenseid_main)
 check('LicenseID app labels XAM file failures status unavailable', 'CreateFileA result=NULL status=unavailable' in licenseid_main and 'WriteFile(ID) result=FALSE status=unavailable' in licenseid_main)
 

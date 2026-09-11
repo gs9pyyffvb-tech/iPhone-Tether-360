@@ -226,6 +226,19 @@ while IFS= read -r source; do
     BEARSSL_OBJECTS+=("$object")
 done < <(find "$XBOXTLS_DIR/SSL" -type f -name '*.c' | sort)
 
+SYSRNG_SHIM="$BUILD/obj/bearssl/it360_sysrng.c"
+cat > "$SYSRNG_SHIM" <<'IT360_SYSRNG_EOF'
+#include "bearssl.h"
+br_prng_seeder br_prng_seeder_system(const char **name) {
+    if (name) *name = 0;
+    return 0;
+}
+IT360_SYSRNG_EOF
+SYSRNG_OBJECT="$BUILD/obj/bearssl/it360_sysrng.o"
+echo "CC  [bearssl] OpenXeChain system-seder shim"
+"$CC" "${BEARSSL_CFLAGS[@]}" -c "$SYSRNG_SHIM" -o "$SYSRNG_OBJECT"
+BEARSL_OBJECTS+=("$SYSRNG_OBJECT")
+
 if [[ ${#BEARSSL_OBJECTS[@]} -eq 0 ]]; then
     echo "ERROR: no BearSSL sources were compiled" >&2
     exit 1

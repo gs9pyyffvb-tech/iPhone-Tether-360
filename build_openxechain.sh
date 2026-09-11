@@ -89,6 +89,8 @@ git -C "$XBOXTLS_DIR" checkout -q "$XBOXTLS_COMMIT"
 # an implicit trust dependency.
 sed -i 's/^#define BR_USE_UNIX_TIME   1$/#define BR_USE_UNIX_TIME   0/' "$XBOXTLS_DIR/SSL/config.h"
 sed -i 's|inc\\bearssl.h|inc/bearssl.h|g' "$XBOXTLS_DIR/SSL/inner.h"
+find "$XBOXTLS_DIR/SSL" -type f -name '*.h' -exec sed -i '/^[[:space:]]*#include/s|\\|/|g' {} +
+find "$XBOXTLS_DIR/SSL" -type f -name '*.c' -exec sed -i '/^[[:space:]]*#include/s|\\|/|g' {} +
 
 COMMON_CXXFLAGS=(
     --target=ppc32-xbox360
